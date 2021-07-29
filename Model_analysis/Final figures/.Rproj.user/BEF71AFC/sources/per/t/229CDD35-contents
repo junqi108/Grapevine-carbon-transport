@@ -1,0 +1,559 @@
+---
+title: "Carbon optimisation"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r global_options, include=FALSE}
+ knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
+ knitr::opts_chunk$set(fig.width=12, fig.height=9)
+```
+
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=FALSE, message=FALSE}
+ if(Sys.getenv("OS") == "Windows_NT")
+{
+  Sys.setenv(R_LIBS_USER  = "H:/Rlibs")
+  .libPaths( c("H:/Rlibs", .libPaths()))
+}
+# 
+#   if(Sys.getenv("OS") == "LINUX")
+#   {R_LIBS_USER = "workspace/hrmjxz/Github/Rlibs"}
+
+{
+    library(plyr)
+    l_ply(list('data.table', 'tidyverse','readxl','tidyr','readr','dplyr','ggplot2','broom'), 
+          require, character.only = T)
+    # tidyverse_update(recursive = FALSE) #updating packages
+    #get the current working directory
+    MainDir <- list(PROJHOME = normalizePath(getwd()))
+    # Input and output directory data file location
+    ExpData = file.path(MainDir, 'ExpData')
+    # figure output directory, mainly the the place for paper writing 
+    FigureOutput = file.path(MainDir, 'Figures')
+    # Output directory, final results except figures, like statistics, and intermediate data set
+    IntResults   = file.path(MainDir, 'IntResults')  
+    SupFunctions = file.path(MainDir, 'SupFunctions')
+    #Folders in the upper file structure
+    source(file.path(SupFunctions,'Layout_of_ggplot.R'))
+    source(file.path(SupFunctions,'Specific_functions.R'))
+    # lsf.str()  #list of functions
+ } 
+```
+
+## remind of the subject
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=FALSE, message=FALSE}
+
+
+current.subject <- "CT_scenarios"
+
+output.name <- paste( current.subject)
+print(output.name)
+
+
+```
+
+
+## Input observed data
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=TRUE, message=TRUE}
+
+  obs_data_fi <- read.csv(file.path(ExpData, "Exp2015_Gerhard_biomass.csv")) 
+
+             
+```
+
+## setting the figure layout
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=TRUE, message=TRUE}
+
+# plot.larvae <- function(data, title, legend=FALSE) 
+l_ply(list( 'doBy', 'gridExtra', 'graphicsQC','RColorBrewer'), require, character.only = T)
+font.size = 18
+
+lib.opts.layout  <- theme(
+  axis.ticks = element_line(colour = "black"),
+  axis.text.y = element_text(colour = "black", size = font.size-1),
+  axis.text.x = element_text(colour = "black", angle = 0, size = font.size-1),
+  axis.title.x = element_text(colour = "black",  size = font.size, vjust=-1),
+  axis.title.y = element_text(colour = "black",  size = font.size, angle=90, vjust=0.2),
+  # plot.margin = unit(c(1, 1, 1, 1), "lines"),
+  panel.background = element_rect(colour = "black", fill = 'white'),
+  # to overcome the strange proble that border become white
+  # panel.border=element_rect(fill=NA),
+  panel.border = element_rect(colour = "black"),
+  panel.grid.major = element_blank(),
+  # panel.grid.major = element_line(colour = "black"),
+  panel.grid.minor = element_blank(),
+  # panel.background = element_blank(),
+    # title for the facet
+  # strip.text.x = element_blank(),
+  strip.text.x = element_text(size = font.size)
+  # 
+  # strip.background = element_blank()
+  # 
+)
+
+lib.opts.legend    <- theme(
+    legend.title= element_text(size=0), 
+    legend.justification = 0,
+    legend.background = element_rect(fill = "#ffffff"),
+    legend.text = element_text(size=font.size-2),
+    legend.key.size = unit(0.9, "cm"),
+    legend.key = element_rect(fill="white", size=0, colour="white"),
+    legend.position= c(0.01,0.9), #'bottom', #
+    # legend.position=  'bottom', #c(0.1,0.9),
+    #legend.position= c(0.6,0.75), #'bottom', # 
+    #legend.position= c(0.53,0.75), #'bottom', # 
+    legend.box = "vertical"  # 'horizontal'   
+)
+
+
+```
+
+## Figure 1 The dynamics of bunch weight at different positions
+```{r , echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, tidy=TRUE}
+
+# file_list <- 
+    # list.files(ExpData) %>%
+    # .[grepl('*E12s.csv', .)]
+
+scenario_sim <- 
+  read_csv(file.path(ExpData, 'Bunch-biomass_0_11.600302046459E12s2.csv')) %>% 
+                  filter(hourOfDay == 12 ) %>% 
+                  select(starts_with("Bunch"), day) %>%   
+                  gather("bunch", "biomass", -day) %>% 
+  mutate(biomass = biomass/1000) 
+                  
+  scenario_sim %>% 
+           ggplot(data=., aes(day, biomass, color = bunch))+ 
+              geom_line(size = 1.5)+
+              # facet_wrap(~treatment,ncol = 2, scales = "free_y")+
+              theme_bw() + 
+              theme(
+                panel.grid.major = element_blank(), 
+                panel.grid.minor = element_blank(),
+                legend.title= element_text(size=0), 
+                legend.justification = 0,
+                legend.background = element_rect(fill = "#ffffff"),
+                legend.text = element_text(size=16),
+                legend.key.size = unit(0.67, "cm"),
+                legend.position = c(0.6, 0.2),
+                legend.box = "verticle"  ) +
+                ylab(expression('Dry mass ' * 
+                                  ' ('*g* ')'))+
+               # ylab("Carbon Concentration (g/cm3)")+
+               xlab('Days after treatment')+
+     lib.opts.layout
+
+  ggsave(file.path(FigureOutput, 'Fig.1S Dynamics of carbon biomass.jpg'),
+         width = 8, height = 6, units = "in")
+
+
+
+```
+## Figure 2 The dynamics of carbon potential at different positions
+```{r , echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, tidy=TRUE}
+
+# file_list <- 
+    # list.files(ExpData) %>%
+    # .[grepl('*E12s.csv', .)]
+
+scenario_sim <- 
+  read_csv(file.path(ExpData, 'Bunch-biomass_0_11.600302046459E12s2.csv')) %>% 
+  select(ends_with("cpt"), day, hourOfDay) %>%
+  group_by(day) %>% 
+  summarise_all( mean) %>% 
+  select(-hourOfDay) %>% 
+  gather("bunch", "carbon", -day) %>% 
+  mutate(carbon = sqrt(2*carbon)) 
+  
+                  
+  scenario_sim %>% 
+           ggplot(data=., aes(day, carbon, color = bunch))+ 
+              geom_line(size = 1.5)+
+              # facet_wrap(~treatment,ncol = 2, scales = "free_y")+
+              theme_bw() + 
+              theme(
+                panel.grid.major = element_blank(), 
+                panel.grid.minor = element_blank(),
+                legend.title= element_text(size=0), 
+                legend.justification = 0,
+                legend.background = element_rect(fill = "#ffffff"),
+                legend.text = element_text(size=16),
+                legend.key.size = unit(0.67, "cm"),
+                legend.position = c(0.8, 0.8),
+                legend.box = "verticle"  ) +
+                ylab(expression('Carbon concentration ' * 
+                                  ' ('*g*' '*cm^{-3}* ')'))+
+               # ylab("Carbon Concentration (g/cm3)")+
+               xlab('Days after treatment')+
+     lib.opts.layout
+
+  ggsave(file.path(FigureOutput, 'Fig. 2S Dynamics of mean daily carbon concentration.jpg'),
+         width = 8, height = 6, units = "in")
+
+
+
+```
+## Figure 3 The diurnal dynamics of carbon concentration at different positions
+```{r , echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, tidy=TRUE}
+
+scenario_sim <- 
+  read_csv(file.path(ExpData, 'Bunch-biomass_0_11.600302046459E12s2.csv')) %>% 
+  select(ends_with("cpt"), day, hourOfDay) %>%
+  filter(day <7) %>% 
+  mutate(day = day + hourOfDay/24) %>% 
+  select(-hourOfDay) %>% 
+  gather("bunch", "carbon", -day) %>% 
+  mutate(carbon = sqrt(2*carbon))
+                  
+  scenario_sim %>% 
+   ggplot(data=., aes(day, carbon, color = bunch))+ 
+      geom_line(size = 1.5)+
+      # facet_wrap(~treatment,ncol = 2, scales = "free_y")+
+      theme_bw() + 
+      theme(
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.title= element_text(size=0), 
+        legend.justification = 0,
+        legend.background = element_rect(fill = "#ffffff"),
+        legend.text = element_text(size=14),
+        legend.key.size = unit(0.67, "cm"),
+        legend.position = c(0.85, 0.855),
+        legend.box = "verticle"  ) +
+        ylab(expression('Carbon concentration ' * 
+                          ' ('*g*' '*cm^{-3}* ')'))+
+       xlab('Days after treatment')+
+    lib.opts.layout
+
+ ggsave(file.path(FigureOutput, 'Fig. 3S Dynamics of diurnal carbon concentration.jpg'),
+         width = 9, height = 6, units = "in")
+
+
+
+```
+
+## Figure 4 The dynamics of biomass of different organs
+```{r , echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, tidy=TRUE}
+
+loadi_s0 <- 
+  read_csv(file.path(ExpData, 'Plant-level_0_11.600302046459E12s2.csv')) 
+
+
+
+carbon_allocate <- 
+  loadi_s0 %>% 
+    rename(
+    day = "day(d)", 
+    hourOfDay = "hourOfDay)",
+    RootUnloading = "rootUnloading(mgC)",
+    WoodLoading   = "woodLoading(mgC)", 
+    totalBerryUnloading = "totalBerryUnloading(mgC)",
+    InternodeLoading = "internodeLoading(mgC)",
+    LeafLoading = "leafLoading(mgC)") 
+
+biomass.dynamic <- 
+carbon_allocate %>% 
+  mutate(berryDryWeight = 5*totalBerryNum*`singleBerryDryWeight[g]`) %>% 
+  select(day,  
+         `woodBiomass(g/plant)`, 
+         `leafBiomass(gr/plant)`,
+         `rootBiomass(g/plant)`,
+          rt.carbon_nonStructure,
+         berryDryWeight,
+         `woodNonstructuralC(gr/plant)`
+         ) %>% 
+  rename(
+         woodBiomass = `woodBiomass(g/plant)`, 
+         leafBiomass = `leafBiomass(gr/plant)`,
+         rootBiomass = `rootBiomass(g/plant)`,
+         
+         rootNSC = rt.carbon_nonStructure,
+         woodNSC = `woodNonstructuralC(gr/plant)`
+         ) %>% 
+  group_by(day) %>% 
+  summarise_all(mean)
+
+load_data <- 
+  carbon_allocate %>% 
+  group_by(day, scenario) %>% 
+  summarise_at(c("RootLoading",
+                 "stemLoading", "LeafLoading" ),
+               sum) %>% 
+  rename(Root = RootLoading, 
+         Stem = stemLoading, 
+         Leaf = LeafLoading) %>% 
+  ungroup() %>% 
+  gather("Organs", "Values", -day, -scenario) 
+
+unload_data <- 
+  carbon_allocate %>% 
+  group_by(day, scenario) %>% 
+  summarise_at(c("RootUnloading",'stemUnloading',
+                 "totalBerryUnloading"), sum) %>% 
+  rename(Root = RootUnloading, 
+         Stem = stemUnloading, 
+         Berry = totalBerryUnloading) %>% 
+  gather("Organs", "Values", -day, -scenario) %>% 
+  ungroup() 
+
+  
+load_fraction <- 
+  carbon_allocate %>%
+  group_by(day, scenario) %>% 
+  summarise_at(c( "fraction_rootLoading","fraction_stemLoading",
+                  "fraction_leafLoading"), mean) %>% 
+  rename(Root = fraction_rootLoading, 
+         Stem = fraction_stemLoading, 
+         Leaf = fraction_leafLoading) %>% 
+  gather("Organs", "Values", -day, -scenario) %>% 
+  mutate(Values = Values * 100)
+  
+
+unload_fraction <-
+    carbon_allocate %>%
+    group_by(day, scenario) %>% 
+    summarise_at(c( "fraction_rootUnloading","fraction_stemUnloading",
+                    "fraction_berryUnloading"), mean) %>% 
+    rename(Root = fraction_rootUnloading, 
+           Stem = fraction_stemUnloading, 
+           Berry = fraction_berryUnloading) %>% 
+    gather("Organs", "Values", -day, -scenario) %>% 
+    mutate(Values = Values * 100) 
+
+
+```
+
+## Fig. biomass dynamics
+```{r , fig.width=12, fig.height=9, echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, tidy=TRUE}
+
+data_plot.1 <- 
+ biomass.dynamic %>% 
+  gather("vars", "values", -day) %>% 
+  mutate(values = values/1000) %>% 
+  filter(vars != 'rootBiomass' & vars != 'woodBiomass')
+
+
+  ggplot(data = data_plot.1,  
+         aes(x = day, y = values, color = vars))+
+   geom_line(aes(linetype = vars), size = 2)+
+   # facet_wrap(~vars, scales = 'free') + 
+  theme_bw() +
+   # theme(strip.text.x = element_text(size = 18))+
+   ylab("Dry mass (g/vine)") +
+   xlab("Days after treatment")+
+   lib.opts.layout+
+   theme(
+    legend.title= element_text(size=0), 
+    legend.justification = 0,
+    legend.background = element_rect(fill = "#ffffff"),
+    legend.text = element_text(size=12),
+    legend.key.size = unit(0.9, "cm"),
+    legend.key = element_rect(fill="white", size=0, colour="white"),
+    legend.position= c(0.3,0.8),
+    legend.box = "vertical"  # 'horizontal'   
+)
+
+
+
+  
+  ggsave(file.path(FigureOutput, 'Dynamics of biomass.jpg'),
+         width = 8, height = 6, units = "in")
+  
+```
+
+
+
+
+## Figure 4 Simulated daily fraction of carbon loading from leaf, stem and root using the mechanistic carbon transport model
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=TRUE, message=TRUE, eval = TRUE}
+
+# car_allo_load_plot <- 
+  unload_fraction %>%  
+      ggplot(data =., aes(x=day, y= Values, color = Organs))+
+      geom_line(size = 1.5) + 
+      ylab("Percentage of unloading")+
+      xlab('Days after treatment') +
+      theme_bw()+
+      lib.opts.layout+
+    theme(
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(),
+      legend.title= element_text(size=0), 
+      legend.justification = 0,
+      legend.background = element_rect(fill = "#ffffff"),
+      legend.text = element_text(size=14),
+      legend.key.size = unit(0.7, "cm"),
+      legend.position = c(0.8, 0.3),
+      legend.box = "verticle" ) 
+      
+ ggsave(file.path(FigureOutput,
+                  'Fig. S Dynamics of percentage of carbon unloading.jpg'),
+        width = 8, height =6, units = "in")
+
+```
+
+
+## Figure 4 Simulated daily fraction of carbon loading from leaf, stem and root using the mechanistic carbon transport model
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=TRUE, message=TRUE, eval = TRUE}
+
+# car_allo_load_plot <- 
+  load_fraction %>%  
+      ggplot(data =., aes(x=day, y= Values, color = Organs))+
+      geom_line(size = 1.5) + 
+      ylab("Percentage of loading")+
+      xlab('Days after treatment') +
+      theme_bw()+
+      lib.opts.layout+
+    theme(
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(),
+      legend.title= element_text(size=0), 
+      legend.justification = 0,
+      legend.background = element_rect(fill = "#ffffff"),
+      legend.text = element_text(size=14),
+      legend.key.size = unit(0.7, "cm"),
+      legend.position = c(0.5, 0.3),
+      legend.box = "verticle" ) 
+      
+ ggsave(file.path(FigureOutput,
+                  'Fig. S Dynamics of percentage of carbon loading.jpg'),
+        width = 8, height =6, units = "in")
+
+```
+
+
+## Figure 4 Simulated daily fraction of carbon loading from leaf, stem and root using the mechanistic carbon transport model
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=TRUE, message=TRUE, eval = TRUE}
+
+# car_allo_load_plot <- 
+  load_data %>%  
+      ggplot(data =., aes(x=day, y= Values/1000, color = Organs))+
+      geom_line(size = 1.5) + 
+      ylab("Sum of daily C loading (g)")+
+      xlab('Days after treatment') +
+      theme_bw()+
+      lib.opts.layout+
+    theme(
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(),
+      legend.title= element_text(size=0), 
+      legend.justification = 0,
+      legend.background = element_rect(fill = "#ffffff"),
+      legend.text = element_text(size=14),
+      legend.key.size = unit(0.7, "cm"),
+      legend.position = c(0.8, 0.8),
+      legend.box = "verticle" ) 
+      
+ ggsave(file.path(FigureOutput,
+                  'Fig. S sum of daily carbon loading.jpg'),
+        width = 8, height =6, units = "in")
+
+```
+
+
+
+#sum of daily unloading
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=TRUE, message=TRUE, eval = TRUE}
+
+# car_allo_load_plot <- 
+  unload_data %>%  
+      ggplot(data =., aes(x=day, y= Values/1000, color = Organs))+
+      geom_line(size = 1.5) + 
+      ylab("Sum of daily C unloading (g)")+
+      xlab('Days after treatment') +
+      theme_bw()+
+      lib.opts.layout+
+    theme(
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(),
+      legend.title= element_text(size=0), 
+      legend.justification = 0,
+      legend.background = element_rect(fill = "#ffffff"),
+      legend.text = element_text(size=14),
+      legend.key.size = unit(0.7, "cm"),
+      legend.position = c(0.8, 0.8),
+      legend.box = "verticle" ) 
+      
+ ggsave(file.path(FigureOutput,
+                  'Fig. S sum of daily carbon unloading.jpg'),
+        width = 8, height =6, units = "in")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

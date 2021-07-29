@@ -1,0 +1,423 @@
+library(GPfit)
+library(data.table)
+library(magrittr)
+library(tibble)
+library(DEoptim)
+library(here)
+#get the current working directory
+MainDir <- here::here()
+# Input and output directory data file location
+ExpData = file.path(MainDir, 'ExpData')
+
+FigureOutput = file.path(MainDir, 'Figures')
+# Output directory, final results except figures, like statistics, and intermediate data set
+IntResults   = file.path(MainDir, 'IntResults')  
+SupFunctions = file.path(MainDir, 'SupFunctions')
+source(file.path(SupFunctions,'Specific_functions.R'))
+
+current.subject <- "DEoptim_res"
+output.name <- paste( current.subject)
+
+# Read DEoptim results
+
+#output the statistical test
+par.0 <-  read.csv(file.path(IntResults, paste0("opt.par",0,".csv")), header = TRUE)
+par.1 <-  read.csv(file.path(IntResults, paste0("opt.par",1,".csv")), header = TRUE)
+par.2 <-  read.csv(file.path(IntResults, paste0("opt.par",2,".csv")), header = TRUE)
+par.0.1 <-  read.csv(file.path(IntResults, paste0("opt.par",0,1,".csv")), header = TRUE)
+par.0.2 <-  read.csv(file.path(IntResults, paste0("opt.par",0,2,".csv")), header = TRUE)
+par.0.1.2 <-  read.csv(file.path(IntResults, paste0("opt.par",0,1, 2,".csv")), header = TRUE)
+par.1.2 <-  read.csv(file.path(IntResults, paste0("opt.par",1, 2,".csv")), header = TRUE)
+
+
+
+
+ par1 <- as.vector(par.0[,1])
+ par2 <- as.vector(par.1[,1])
+
+ par3 <- as.vector(par.2[,1])
+ par4 <- as.vector(par.0.1[,1])
+ par5 <- as.vector(par.0.2[,1])
+ par6 <- as.vector(par.0.1.2[,1])
+ par7 <- as.vector(par.1.2[,1])
+
+par <- (par1+par2+par3+par4+par5+par6+par7)/7
+
+par.all <- 
+rbind(par1,par2) %>% 
+  rbind(., par3) %>% 
+  rbind(., par4) %>% 
+  rbind(., par5) %>% 
+  rbind(., par6) %>% 
+  rbind(., par7)
+
+par.all <- as.data.frame(par.all)
+
+sd(par.all$V1)/mean(par.all$V1)
+
+library(dplyr)
+
+sd1 <- 
+par.all %>% 
+  summarise_each(funs = c(sd)) 
+
+?sd
+
+mean1 <- 
+  par.all %>% 
+  summarise_each(funs = c(mean))
+
+as.vector(sd1[1,])/as.vector(mean1[1,])
+################################################################
+# load the saved GP model from the previous run
+
+# Read GPfit results
+model_fit_0=readRDS('model_fit_0.rds', refhook = NULL)
+model_fit_1=readRDS('model_fit_1.rds', refhook = NULL)
+model_fit_2=readRDS('model_fit_2.rds', refhook = NULL)
+model_fit_3=readRDS('model_fit_3.rds', refhook = NULL)
+
+
+##### 3. GP fit for parameters and simulation results ####
+
+
+#### 4. combine gpfit results and observed data ####
+data_obs_model[, Grp := .GRP, by = .(day, scenario)][]
+
+#berryDM, rootDM, totalRootNSC, woodDM
+#berryDM, rootDM, totalRootNSC, woodDM
+scenario_sel = 2
+model_fit_0$mod_g
+
+Gp_combine_0 <- 
+  model_fit_0[data_obs_model[day!=0], 
+              on= c("day", "scenario")] %>% 
+  .[, c("scenario", "day", 'mod_g',  'berryDM')] 
+
+Gp_combine_1 <- 
+  model_fit_1[data_obs_model[day!=0 ], 
+              on= c("day", "scenario")] %>% 
+  .[, c("scenario", "day", 'mod_g',  'totalRootDM')]
+
+Gp_combine_2 <- 
+  model_fit_2[data_obs_model[day!=0], 
+              on= c("day", "scenario")] %>% 
+  .[, c("scenario", "day", 'mod_g',  'totalRootNSC')]
+
+Gp_combine_3 <- 
+  model_fit_3[data_obs_model[day!=0], 
+              on= c("day", "scenario")] %>% 
+  .[, c("scenario", "day", 'mod_g',  'woodDM')]
+
+
+#assign the parameters
+# par.d <- read.csv(file.path(IntResults, 'GP_result_two_scenarios_8-12.g.csv'), 
+#                 header = T)
+# par[1:4] <- as.vector(par.d[1, 1:4])
+library(dplyr)
+
+cost.fun <- function(par) 
+{
+  mod_gp <- as.list(Gp_combine_0$mod_g) 
+  obs_gp <- t(Gp_combine_0[,4])
+  y_hat_out  <- t( rep(0, length(mod_gp))) 
+  
+  for (i in 1:nrow(Gp_combine_0))
+  {
+    y_hat_gp <-  predict(mod_gp[[i]], matrix(par, ncol = 6))$Y_hat
+    y_hat_out[i]<- y_hat_gp
+  }
+  return(y_hat_out)
+  
+}
+
+simu0=cost.fun(par)
+obs_gp0 <- t(Gp_combine_0[,4])
+scenario<-t(Gp_combine_0[,1])
+day<-t(Gp_combine_0[,2])
+Varib  <- t( rep(c("BerryDM"), length(obs_gp0))) 
+obs_pre0 <-
+  data.frame(t(rbind(obs_gp0,simu0,scenario,day,Varib )))  
+
+names(obs_pre0)<-c("Obs", "Pre", "scenario", "day", "Varib")
+
+
+
+# #rootNSC 
+
+cost.fun <- function(par) 
+{
+  mod_gp <- as.list(Gp_combine_2$mod_g) 
+  obs_gp <- t(Gp_combine_2[,4])
+  y_hat_out  <- t( rep(0, length(mod_gp))) 
+  
+  for (i in 1:nrow(Gp_combine_2))
+  {
+    y_hat_gp <-  predict(mod_gp[[i]], matrix(par, ncol = 6))$Y_hat
+    y_hat_out[i]<- y_hat_gp
+  }
+  return(y_hat_out)
+  
+}
+
+
+
+simu2=cost.fun(par)
+obs_gp2 <- t(Gp_combine_2[,4])
+scenario<-t(Gp_combine_2[,1])
+day<-t(Gp_combine_2[,2])
+
+Varib  <- t( rep(c("totalRootNSC"),length(obs_gp2))) 
+
+obs_pre2 <-
+  data.frame(t(rbind(obs_gp2,simu2,scenario,day,Varib )))  
+
+names(obs_pre2)<-c("Obs", "Pre", "scenario", "day", "Varib")
+
+#woodDM 
+
+
+cost.fun <- function(par) 
+{
+  mod_gp <- as.list(Gp_combine_3$mod_g) 
+  obs_gp <- t(Gp_combine_3[,4])
+  y_hat_out  <- t( rep(0, length(mod_gp))) 
+  
+  for (i in 1:nrow(Gp_combine_3))
+  {
+    y_hat_gp <-  predict(mod_gp[[i]], matrix(par, ncol = 6))$Y_hat
+    y_hat_out[i]<- y_hat_gp
+  }
+  return(y_hat_out)
+  
+}
+
+
+
+simu3=cost.fun(par)
+obs_gp3 <- t(Gp_combine_3[,4])
+scenario<-t(Gp_combine_3[,1])
+day<-t(Gp_combine_3[,2])
+
+Varib  <- t( rep(c("woodDM"),length(obs_gp3))) 
+
+obs_pre3 <-
+  data.frame(t(rbind(obs_gp3,simu3,scenario,day,Varib )))  
+
+names(obs_pre3)<-c("Obs", "Pre", "scenario", "day", "Varib")
+
+
+
+
+
+
+obs_pre<-
+  rbind(obs_pre0,obs_pre2,obs_pre3) %>% 
+  mutate_at(c('Obs',"Pre", "day"), 
+            funs(as.numeric(as.character(.))))
+
+obs_pre
+
+names(obs_pre)
+
+ggplot(obs_pre, aes(x=day, y=as.numeric(Pre)  ))  + 
+  geom_point() +
+  facet_wrap(~ Varib*scenario, ncol=3, scales = 'free_y')+
+  theme(legend.position =  "none")+
+  
+  
+  geom_point(data=obs_pre,aes(x=day, y=as.numeric(Obs), col="red"))+
+  
+  facet_wrap(~ Varib*scenario, ncol=3)  +
+  xlab("DAWS") + ylab("berryDM (g)")+
+  theme(
+    strip.text.x = element_text(
+      size = 15#, color = "red"
+    ))
+errordata=as.numeric(obs_pre$Pre)- as.numeric(obs_pre$Obs)
+rmse <- sqrt( sum((errordata) ^2)/length(obs_pre$Obs))
+rmse
+
+fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre)
+summary(fit.gpfit)
+
+
+
+
+#par 0
+# rmse
+# [1] 32.20684
+# R> 
+#   R> fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre)
+# R> summary(fit.gpfit)
+# 
+# Call:
+#   lm(formula = as.numeric(Pre) ~ as.numeric(Obs), data = obs_pre)
+# 
+# Residuals:
+#   Min      1Q  Median      3Q     Max 
+# -71.175 -12.311   6.296  11.091  92.192 
+# 
+# Coefficients:
+#   Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)      3.99155    7.68281    0.52    0.606    
+# as.numeric(Obs)  0.95613    0.02989   31.99   <2e-16 ***
+#   ---
+#   Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+# 
+# Residual standard error: 31.76 on 46 degrees of freedom
+# Multiple R-squared:  0.957,	Adjusted R-squared:  0.956 
+# F-statistic:  1023 on 1 and 46 DF,  p-value: < 2.2e-16
+
+
+# par 1
+# R> rmse
+# [1] 29.07327
+# R> 
+#   R> fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre)
+# R> summary(fit.gpfit)
+# 
+# Call:
+#   lm(formula = as.numeric(Pre) ~ as.numeric(Obs), data = obs_pre)
+# 
+# Residuals:
+#   Min      1Q  Median      3Q     Max 
+# -81.219  -9.622   2.986  10.545  80.414 
+# 
+# Coefficients:
+#   Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)     -6.86969    6.89426  -0.996    0.324    
+# as.numeric(Obs)  0.99388    0.02682  37.054   <2e-16 ***
+#   ---
+#   Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+# 
+# Residual standard error: 28.5 on 46 degrees of freedom
+# Multiple R-squared:  0.9676,	Adjusted R-squared:  0.9669 
+# F-statistic:  1373 on 1 and 46 DF,  p-value: < 2.2e-16
+
+
+# # par 2
+# [1] 41.02134
+# R> 
+#   R> fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre)
+# R> summary(fit.gpfit)
+# 
+# Call:
+#   lm(formula = as.numeric(Pre) ~ as.numeric(Obs), data = obs_pre)
+# 
+# Residuals:
+#   Min      1Q  Median      3Q     Max 
+# -102.32  -10.35    3.64   12.58  107.98 
+# 
+# Coefficients:
+#   Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)     -10.52151    9.99504  -1.053    0.298    
+# as.numeric(Obs)   1.04361    0.03889  26.838   <2e-16 ***
+#   ---
+#   Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+# 
+# Residual standard error: 41.31 on 46 degrees of freedom
+# Multiple R-squared:   0.94,	Adjusted R-squared:  0.9387 
+# F-statistic: 720.3 on 1 and 46 DF,  p-value: < 2.2e-16
+
+#par 0,1
+# R> rmse
+# [1] 31.4916
+# R> 
+#   R> fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre)
+# R> summary(fit.gpfit)
+# 
+# Call:
+#   lm(formula = as.numeric(Pre) ~ as.numeric(Obs), data = obs_pre)
+# 
+# Residuals:
+#   Min      1Q  Median      3Q     Max 
+# -85.380  -7.139   3.706   9.793  88.297 
+# 
+# Coefficients:
+#   Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)     -6.83314    7.46067  -0.916    0.365    
+# as.numeric(Obs)  0.99027    0.02903  34.117   <2e-16 ***
+#   ---
+#   Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+# 
+# Residual standard error: 30.84 on 46 degrees of freedom
+# Multiple R-squared:  0.962,	Adjusted R-squared:  0.9612 
+# F-statistic:  1164 on 1 and 46 DF,  p-value: < 2.2e-16
+
+#par 0,2
+# R> rmse
+# [1] 31.14478
+# R> 
+#   R> fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre)
+# R> summary(fit.gpfit)
+# 
+# Call:
+#   lm(formula = as.numeric(Pre) ~ as.numeric(Obs), data = obs_pre)
+# 
+# Residuals:
+#   Min      1Q  Median      3Q     Max 
+# -84.612  -8.885   4.957   9.435  83.574 
+# 
+# Coefficients:
+#   Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)     -3.18340    7.54344  -0.422    0.675    
+# as.numeric(Obs)  0.98702    0.02935  33.631   <2e-16 ***
+#   ---
+#   Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+# 
+# Residual standard error: 31.18 on 46 degrees of freedom
+# Multiple R-squared:  0.9609,	Adjusted R-squared:  0.9601 
+# F-statistic:  1131 on 1 and 46 DF,  p-value: < 2.2e-16
+
+#par.0.1.2
+# [1] 34.08528
+# R> 
+#   R> fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre)
+# R> summary(fit.gpfit)
+# 
+# Call:
+#   lm(formula = as.numeric(Pre) ~ as.numeric(Obs), data = obs_pre)
+# 
+# Residuals:
+#   Min      1Q  Median      3Q     Max 
+# -91.931  -8.354   5.166  10.323  87.665 
+# 
+# Coefficients:
+#   Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)     -9.01654    8.26967   -1.09    0.281    
+# as.numeric(Obs)  1.01405    0.03217   31.52   <2e-16 ***
+#   ---
+#   Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+# 
+# Residual standard error: 34.18 on 46 degrees of freedom
+# Multiple R-squared:  0.9557,	Adjusted R-squared:  0.9548 
+# F-statistic: 993.4 on 1 and 46 DF,  p-value: < 2.2e-16
+
+
+#par.1.2
+
+# R> rmse
+# [1] 30.47666
+# R> 
+#   R> fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre)
+# R> summary(fit.gpfit)
+# 
+# Call:
+#   lm(formula = as.numeric(Pre) ~ as.numeric(Obs), data = obs_pre)
+# 
+# Residuals:
+#   Min      1Q  Median      3Q     Max 
+# -86.279 -14.438   5.707  11.398  83.199 
+# 
+# Coefficients:
+#   Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)     -7.86408    7.38455  -1.065    0.292    
+# as.numeric(Obs)  1.01002    0.02873  35.156   <2e-16 ***
+#   ---
+#   Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+# 
+# Residual standard error: 30.52 on 46 degrees of freedom
+# Multiple R-squared:  0.9641,	Adjusted R-squared:  0.9633 
+# F-statistic:  1236 on 1 and 46 DF,  p-value: < 2.2e-16
+

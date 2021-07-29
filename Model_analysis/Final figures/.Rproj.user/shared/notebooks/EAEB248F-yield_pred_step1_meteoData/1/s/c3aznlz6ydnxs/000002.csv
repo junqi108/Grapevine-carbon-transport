@@ -1,0 +1,10 @@
+"0","```r
+current.variety <- 'SBL'
+current.subject <- 'yield_pred'
+
+
+output.name <- paste(current.variety, current.subject,  sep = \"_\")
+print(output.name)
+```"
+"1","[1] \"SBL_yield_pred\"
+"

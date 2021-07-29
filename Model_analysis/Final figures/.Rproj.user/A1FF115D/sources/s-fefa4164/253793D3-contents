@@ -1,0 +1,994 @@
+---
+title: "Carbon optimisation"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r global_options, include=FALSE}
+ knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
+ knitr::opts_chunk$set(fig.width=12, fig.height=8)
+```
+
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=FALSE, message=FALSE}
+# .libPaths('E:/Rlibs') 
+rm(list = ls())
+    {
+    library(plyr)
+    l_ply(list('tidyverse','readxl','tidyr','readr','dplyr','ggplot2','broom','ggthemes','plotly','purrr',
+               'reshape2','cowplot','grid','lubridate'
+               ),
+    require, character.only = T)
+    # tidyverse_update(recursive = FALSE) #updating packages
+    #get the current working directory
+    MainDir <- list(PROJHOME = normalizePath(getwd()))
+    # Input and output directory data file location
+    ExpData = file.path(MainDir, 'ExpData')
+    # figure output directory, mainly the the place for paper writing 
+    FigureOutput = file.path(MainDir, 'Figures')
+    # Output directory, final results except figures, like statistics, and intermediate data set
+    IntResults   = file.path(MainDir, 'IntResults')  
+    SupFunctions = file.path(MainDir, 'SupFunctions')
+    #Folders in the upper file structure
+    # modelInput      = file.path('../../Model_input')
+    # modelScenarios  = file.path('../../Model_scenarios/')
+    # modelParameters = file.path('../Plant_parameters/')
+    
+    # Load all functions
+    # CustFunctions = file.path('H:/Programming language/R language/Function_libraries/')
+    # source(file.path(CustFunctions,'Customized_curve_fitting_functions.R'))
+    # source(file.path(CustFunctions,'Customized_functions_data_reconstruction.R'))
+    # specific function
+    source(file.path(SupFunctions,'Layout_of_ggplot.R'))
+    source(file.path(SupFunctions,'Specific_functions.R'))
+    # lsf.str()  #list of functions
+ } 
+```
+
+#remind of the subject
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=FALSE, message=FALSE}
+
+
+current.subject <- "Carbon_opt_fig"
+
+output.name <- paste( current.subject)
+print(output.name)
+
+
+```
+
+#input Simulated data
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE,  error=FALSE, message=FALSE}
+
+  
+data_sim0_fi  <-  
+  read_csv(file.path(ExpData, 'Bunch-biomass_0_1_NO_stress.csv')) %>% 
+              filter(hourOfDay == 12)  %>% 
+              mutate(data.type = 'sim', treatment = "100 leaves", method="CT" ) %>%
+              mutate(totalRootDM  = structuralRootDM + rootDM) %>% 
+              mutate(totalRootNSC = structuralRootNSC + fineRootNSC)
+
+data_sim1_fi  <-  
+  read_csv(file.path(ExpData, 'Bunch-biomass_1_1_NO_stress.csv')) %>% 
+              filter(hourOfDay == 12)  %>% 
+              mutate(data.type = 'sim' , treatment = "25 leaves", method="CT" ) %>% 
+              mutate(totalRootDM  = structuralRootDM + rootDM) %>% 
+              mutate(totalRootNSC = structuralRootNSC + fineRootNSC)
+
+data_sim2_fi  <-  
+  read_csv(file.path(ExpData, 'Bunch-biomass_2_1_NO_stress.csv')) %>% 
+              filter(hourOfDay == 12) %>%  
+              mutate(data.type = 'sim', treatment = "No leaves", method="CT" ) %>% 
+              mutate(totalRootDM  = structuralRootDM + rootDM) %>% 
+              mutate(totalRootNSC = structuralRootNSC + fineRootNSC)
+
+data_sim2_fi$treatment
+# data_sim0_fi  <-  read_csv(file.path(ExpData, 'Bunch-biomass_0_2_NO_stress.csv')) %>% 
+#               filter(hourOfDay == 12)  %>% 
+#               mutate(data.type = 'sim', treatment = "100 leaves", method="CommonPool" )
+# 
+# data_sim1_fi  <-  read_csv(file.path(ExpData, 'Bunch-biomass_1_2_NO_stress.csv'))                                %>% filter(hourOfDay == 12)  %>% 
+#               mutate(data.type = 'sim' , treatment = "25 leaves", method="CommonPool")
+# 
+# data_sim2_fi  <-  
+#   read_csv(file.path(ExpData, 'Bunch-biomass_2_2_NO_stress.csv'))%>%  
+#   filter(hourOfDay == 12) %>%  
+#   mutate(data.type = 'sim', 
+#          treatment = "No leaves",
+#          method="CommonPool")  
+
+
+```
+
+# Input observed data
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=TRUE, message=TRUE}
+
+  obs_data_fi <- read.csv(file.path(ExpData, "Exp2015_Gerhard_biomass.csv")) 
+  glimpse(obs_data_fi)
+             
+```
+
+
+
+# Plots for f(c, km) =   c/( c + km) with respect to different km  values, 
+and x variable was carbon potential cp = 0 to 0.08
+
+```{r, fig.width=20, fig.height= 18,echo=TRUE}
+
+cp <- seq(1e-6, 1e-2, length.out = 10)
+c <- sqrt(2*cp)
+
+ME <- function(cp, KMcp)
+{
+  return(cp / (cp + KMcp))
+}
+
+KMcp = seq(from = 1e-6,to = 8e-3, length.out = 10)
+           
+data1 <- expand.grid(cp, KMcp)
+
+
+cdata <- data.frame(cp1 = data1[,1], 
+                    c1 = rep(c, 10),
+                    KMcp = round(data1[,2], 6))
+cdata
+
+cdata <-
+cdata %>% 
+  group_by(KMcp) %>% 
+  mutate(ycp = ME(cp, KMcp))
+  
+
+p1 <- ggplot(data = cdata, aes(x = cp1, y=ycp, colour = as.factor(KMcp))) +
+  geom_line(size = 1)+
+   theme_bw() + 
+   theme(
+   panel.grid.major = element_blank(), 
+   panel.grid.minor = element_blank(),
+  axis.ticks = element_line(colour = "black"),
+  axis.text.y = element_text(colour = "black", size=12),
+  axis.text.x = element_text(colour = "black", angle = 0, size=12),
+  axis.title.x = element_text(colour = "black",  size = 12, vjust=-1),
+  axis.title.y = element_text(colour = "black",  size = 12, angle=90, vjust=0.2),
+  legend.key.size = unit(0.67, "cm"),
+  legend.text = element_text(size=11)
+  )+
+  scale_x_continuous(labels = scales::scientific)+
+  xlab(expression('Carbon potential' * 
+                                  ' ('*g^{2}*' '*cm^{-6}* ')'))+
+  ylab('Rate limiting factor')
+
+
+
+```
+
+# Plots for f(c, km) =   c/( c + km) with respect to different km  values,
+# and carbon concentration = 0 to 0.4 (this is just carbon not sugar) 
+
+```{r, fig.width=20, fig.height= 18,echo=TRUE}
+cp <- seq(1e-6, 1e-2, length.out = 10)
+c <- sqrt(2*cp)
+
+ME <- function(cp, KMcp)
+{
+  return(cp / (cp + KMcp))
+}
+
+KMcp = seq(from = 1e-6,to = 8e-3, length.out = 10)
+           
+data1 <- expand.grid(cp, KMcp)
+
+
+cdata <- data.frame(cp1 = data1[,1], 
+                    c1 = rep(c, 10),
+                    KMcp = round(data1[,2], 6))
+cdata
+
+cdata <-
+cdata %>% 
+  group_by(KMcp) %>% 
+  mutate(ycp = ME(cp, KMcp))
+  
+p2 <- 
+ggplot(data = cdata, aes(x = c1, y=ycp, colour = as.factor(KMcp))) +
+  geom_line(size = 1)+
+   theme_bw() + 
+   theme(
+   panel.grid.major = element_blank(), 
+   panel.grid.minor = element_blank(),
+  axis.ticks = element_line(colour = "black"),
+  axis.text.y = element_text(colour = "black", size=12),
+  axis.text.x = element_text(colour = "black", angle = 0, size=12),
+  axis.title.x = element_text(colour = "black",  size = 12, vjust=-1),
+  axis.title.y = element_text(colour = "black",  size = 12, angle=90, vjust=0.2),
+  legend.key.size = unit(0.67, "cm"),
+  legend.text = element_text(size=11)
+  )+
+  scale_x_continuous(labels = scales::scientific)+
+  xlab(expression('Carbon concentration' * 
+                                  ' ('*g*' '*cm^{-3}* ')'))+
+  ylab('Rate limiting factor')
+
+p3=grid.arrange(p1, p2, ncol = 1)
+
+ggsave(file.path(FigureOutput,'Sink unloading function.jpeg'), plot=p3, width = 16, height = 20, unit="cm")
+
+
+```
+
+
+
+## Plots for f(cp, b, c0) =   1/( 1+ exp(b*(cp - c0)) with
+## respect to different c0 values, and cp =  1e-6 to 0.001,
+## where c is Carbohydrate potential
+## b = 900
+```{r , warning=FALSE, echo=FALSE, tidy=TRUE, error=TRUE, message=TRUE }
+cp <- seq(1e-6, 0.01, length.out = 10)
+
+c <- sqrt(2*cp)
+
+sloading <- function(cp, b, c0)
+{
+  return(1/( 1+ exp(b*(cp - c0))))
+}
+
+c0 = seq(from = 1e-4,to = 8e-3, length.out = 10)
+           
+data1 <- expand.grid(cp, c0)
+
+
+cdata <- data.frame(cp1 = data1[,1], 
+                    c1 = rep(c, 10),
+                    c0 = round(data1[,2],4))
+cdata
+
+cdata <-
+cdata %>% 
+  group_by(c0) %>% 
+  mutate(ycp = sloading(cp, 900, c0))
+  
+options(scipen=10000)
+p1 <- 
+ggplot(data = cdata, aes(x = cp1, y=ycp, colour = as.factor(c0))) +
+  geom_line(size = 1)+
+   theme_bw() + 
+   theme(
+   panel.grid.major = element_blank(), 
+   panel.grid.minor = element_blank(),
+  axis.ticks = element_line(colour = "black"),
+  axis.text.y = element_text(colour = "black", size=12),
+  axis.text.x = element_text(colour = "black", angle = 0, size=12),
+  axis.title.x = element_text(colour = "black",  size = 12, vjust=-1),
+  axis.title.y = element_text(colour = "black",  size = 12, angle=90, vjust=0.2),
+  legend.key.size = unit(0.67, "cm"),
+  legend.text = element_text(size=11)
+  )+
+  scale_x_continuous(labels = scales::scientific)+
+  xlab("")+
+  ylab('Rate limiting factor')
+
+
+
+```
+
+## Plots for f(cp, b, c0) =   1/( 1+ exp(b*(cp - c0)) with
+## respect to different b values, and cp =  1e-6 to 0.001,
+## where c is Carbohydrate potential
+
+```{r , warning=FALSE, echo=FALSE, tidy=TRUE, error=TRUE, message=TRUE }
+cp <- seq(1e-6, 0.01, length.out = 10)
+
+c <- sqrt(2*cp)
+
+sloading <- function(cp, b, c0)
+{
+  return(1/( 1+ exp(b*(cp - c0))))
+}
+
+b = seq(from = 300,to = 1200, length.out = 10)
+           
+data1 <- expand.grid(cp, b)
+
+
+cdata <- data.frame(cp1 = round(data1[,1], 4), 
+                    c1 = rep(c, 10),
+                    gk = round(data1[,2], 4))
+cdata
+
+cdata <-
+cdata %>% 
+  group_by(gk) %>% 
+  mutate(ycp = sloading(cp, gk, 4e-3))
+  
+p2 <-  
+ggplot(data = cdata, aes(x = cp1, y=ycp, colour = as.factor(gk))) +
+  geom_line(size = 1)+
+  theme_bw() + 
+   theme(
+   panel.grid.major = element_blank(), 
+   panel.grid.minor = element_blank(),
+  axis.ticks = element_line(colour = "black"),
+  axis.text.y = element_text(colour = "black", size=12),
+  axis.text.x = element_text(colour = "black", angle = 0, size=12),
+  axis.title.x = element_text(colour = "black",  size = 12, vjust=-1),
+  axis.title.y = element_text(colour = "black",  size = 12, angle=90, vjust=0.2),
+  legend.key.size = unit(0.67, "cm"),
+  legend.text = element_text(size=11)
+  )+
+  scale_x_continuous(labels = scales::scientific)+
+  xlab(expression('Carbon potential' * 
+                                  ' ('*g^{2}*' '*cm^{-6}* ')'))+
+  ylab('Rate limiting factor')
+
+p3=grid.arrange(p1, p2, ncol = 1)
+
+ggsave(file.path(FigureOutput,'Souce loading function.jpeg'), plot=p3, width = 16, height = 20, unit="cm")
+
+```
+
+
+# Biomass dynamic
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=TRUE, message=TRUE }
+
+   bio_da <- obs_data_fi %>% 
+              mutate(scenario = replace(scenario, scenario == 0, "100 leaves"), 
+              scenario = replace(scenario, scenario == 1, "25 leaves"),
+              scenario = replace(scenario, scenario == 2, "No leaves")) %>% 
+             rename(treatment = "scenario")
+            
+  bio_obs <- bio_da %>% 
+              gather("Organs", "Values", berryDM, leafDM,
+                     structuralRootDM, woodDM, structuralRootNSC)
+
+  ggplot(bio_obs, aes(day, Values, color = treatment) )+
+    geom_point(size = 4) + facet_wrap(~Organs) +
+     theme_bw() + theme(text = element_text(size = 20), 
+                        legend.position = "bottom")
+   
+   
+ggsave(file.path(FigureOutput, 'bio_plot.jpg'), width = 35, height = 25, units = "cm")
+
+```
+# for the paper
+```{r , echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, tidy=TRUE}
+
+obs_data2_fi <- obs_data_fi %>%  filter (scenario == 2 )%>% 
+             mutate(data.type = 'obs', treatment = 'No leaves') 
+
+obs_data1_fi <- obs_data_fi %>%  filter (scenario == 1) %>% 
+              mutate(data.type = 'obs', treatment = '25 leaves')
+
+obs_data0_fi <- obs_data_fi %>%  filter (scenario == 0) %>% 
+              mutate(data.type = 'obs', treatment = '100 leaves')
+
+
+com_data2_fi <- bind_rows(data_sim0_fi, data_sim1_fi, data_sim2_fi, 
+                          obs_data0_fi, obs_data1_fi, obs_data2_fi) 
+
+# com_data2_fi$treatment
+
+ data_plot.1 <- 
+   com_data2_fi %>% 
+   select(berryDM, totalRootDM, totalRootNSC, 
+          woodDM,treatment, data.type, day, hourOfDay, scenario) %>% 
+   rename('Trunk DM' = woodDM, 'Bunch DM' = berryDM) %>% 
+   rename('Total root DM' = totalRootDM, 'Total root NSC' = totalRootNSC) %>% 
+  gather("vars", "values", -day, -hourOfDay, -scenario, -data.type, -treatment) 
+ 
+ data_plot.2 <- 
+ data_plot.1 %>% 
+   select(vars, values, day, treatment,data.type) %>% 
+   mutate(values = values/1000) %>% 
+   filter(vars == 'Bunch DM'|vars == 'Total root DM'|
+          vars == 'Total root NSC'|vars == 'Trunk DM') %>% 
+   mutate(vars = factor(vars, levels = c('Bunch DM', 
+                                         'Total root NSC',
+                                         'Total root DM', 'Trunk DM')))
+
+ com_data_sim <- data_plot.2 %>% filter(data.type == 'sim')
+ com_data_obs <- data_plot.2 %>% filter(data.type == 'obs')
+
+ 
+ 
+  ggplot(data=com_data_sim,  aes(x = day, y = values, color = treatment))+
+   geom_line(aes(linetype = treatment), size = 1)+
+   geom_point(data=com_data_obs, aes(x = day, y = values, 
+                                     shape = treatment), size =2)+
+   facet_wrap(~vars, scales = 'free') + theme_bw() +
+   theme(panel.grid.major = element_blank(), 
+         panel.grid.minor = element_blank(),
+        legend.title= element_text(size=0), 
+        legend.justification = 0,
+        legend.key=element_blank(),
+        # legend.background = element_rect(fill = "#ffffff"),
+        legend.text = element_text(size=9),
+        legend.key.size = unit(0.5, "cm"),
+        legend.position = c(0.02, 0.9))+
+   theme(text = element_text(size=12)) +
+   ylab("Dry matter (g/vine)") +
+   xlab("Days after treatment")
+ 
+ 
+
+ ggsave(file.path(FigureOutput, 'verification_abstract.jpg'), width = 19, height = 19*0.7, 
+        units = "cm")
+
+```
+
+# for the abstract, phloem carbon concentration
+```{r , echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, tidy=TRUE}
+common.0 <- 
+    read_csv(file.path(ExpData, 'Carbon-Potential_0_2_NO_stress.csv')) %>% 
+    rename(day = "day(d)") %>% 
+    mutate( CP = pb.c_concentration) %>%
+    group_by(scenario, day) %>% 
+    summarise_at('CP', mean) %>%
+    select( day, scenario, CP)
+
+common.1 <- 
+    read_csv(file.path(ExpData, 'Carbon-Potential_1_2_NO_stress.csv')) %>% 
+   rename(day = "day(d)") %>% 
+    mutate( CP = pb.c_concentration) %>%
+    group_by(scenario, day) %>% 
+    summarise_at('CP', mean) %>%
+    select( day, scenario, CP)
+common.2 <- 
+    read_csv(file.path(ExpData, 'Carbon-Potential_2_2_NO_stress.csv')) %>% 
+    rename(day = "day(d)") %>% 
+    mutate( CP = pb.c_concentration) %>%
+    group_by(scenario, day) %>% 
+    summarise_at('CP', mean) %>%
+    select( day, scenario, CP)
+
+temp <- 
+  read_csv(file.path(ExpData, 'Plant-level_2_1_NO_stress.csv')) %>% 
+  rename(day = "day(d)", Ta = "Ta (degree)") %>% 
+  select(day, scenario, Ta) %>% 
+  group_by(day, scenario) %>% 
+  summarise_at('Ta', mean) %>% 
+  mutate(treatment = 'Daily mean temperature', organ = 'Trunk') %>% 
+  rename(CC = Ta)
+# add a daily mean temperature figure
+
+data_poten_s0 <- 
+  read_csv(file.path(ExpData, 'Carbon-Potential_0_1_NO_stress.csv'))%>% 
+                  rename(day = "day(d)") %>% 
+                  mutate( Int_3 = sqrt(2*int3.cpt),Int_10 = sqrt(2*int10.cpt),
+                         'Fine root' = sqrt(2*root.cpt), Trunk = sqrt(2*trunk.cpt)) %>%
+                  select(day, scenario,'Int_3','Int_10', 'Fine root', 'Trunk') %>%  
+                  group_by(scenario, day) %>% 
+                  summarise_at(c('Int_3','Int_10', 'Fine root', 'Trunk'), mean) %>% 
+                  left_join(., common.0, by = c('day', 'scenario')) %>% 
+                  gather("organ", "CC",Int_3, Int_10, CP,
+                         'Fine root', Trunk, -day, -scenario) %>% 
+                  mutate(treatment = "100 leaves")      
+ data_poten_s1 <- 
+  read_csv(file.path(ExpData, 'Carbon-Potential_1_1_NO_stress.csv'))%>% 
+                   rename(day = "day(d)") %>% 
+                  mutate( Int_3 = sqrt(2*int3.cpt),Int_10 = sqrt(2*int10.cpt),
+                         'Fine root' = sqrt(2*root.cpt), Trunk = sqrt(2*trunk.cpt)) %>%
+                  select(day, scenario,'Int_3','Int_10', 'Fine root', 'Trunk') %>%  
+                  group_by(scenario, day) %>% 
+                  summarise_at(c('Int_3','Int_10', 'Fine root', 'Trunk'), mean) %>% 
+                  left_join(., common.1, by = c('day', 'scenario')) %>% 
+                  gather("organ", "CC",Int_3, Int_10, CP,
+                         'Fine root', Trunk, -day, -scenario) %>% 
+                  mutate(treatment = "25 leaves") 
+
+ data_poten_s2 <-
+  read_csv(file.path(ExpData, 'Carbon-Potential_2_1_NO_stress.csv'))%>% 
+  rename(day = "day(d)") %>% 
+                  mutate( Int_3 = sqrt(2*int3.cpt),Int_10 = sqrt(2*int10.cpt),
+                         'Fine root' = sqrt(2*root.cpt), Trunk = sqrt(2*trunk.cpt)) %>%
+                  select(day, scenario,'Int_3','Int_10', 'Fine root', 'Trunk') %>%  
+                  group_by(scenario, day) %>% 
+                  summarise_at(c('Int_3','Int_10', 'Fine root', 'Trunk'), mean) %>% 
+                  left_join(., common.2, by = c('day', 'scenario')) %>% 
+                  gather("organ", "CC",Int_3, Int_10, CP,
+                         'Fine root', Trunk, -day, -scenario) %>%                  
+                  mutate(treatment = "No leaves")        
+ 
+carbon_con <- 
+  bind_rows(data_poten_s0, data_poten_s1, data_poten_s2, temp) %>% 
+  mutate(treatment = factor(treatment, levels = c("100 leaves", '25 leaves',
+                            "No leaves", "Daily mean temperature"))) 
+  
+  # fct_relevel(carbon_con$treatment, "Daily mean temperature", after = 3)
+  
+  
+  
+
+# carbon_con_s2 <- 
+  carbon_con %>% 
+           ggplot(data=., aes(day, CC, color = organ))+ 
+              geom_line()+
+              facet_wrap(~treatment,ncol = 2, scales = 'free_y')+
+              theme_bw() + 
+              theme(
+                panel.grid.major = element_blank(), 
+                panel.grid.minor = element_blank(),
+                legend.title= element_text(size=0), 
+                legend.justification = 0.5,
+                legend.background = element_rect(fill = "#ffffff"),
+                legend.text = element_text(size=11),
+                legend.key.size = unit(0.67, "cm"),
+                legend.position = "bottom", #c(0.26, 0.67),
+                legend.box = "horizontal",
+                legend.margin=margin(t = 0, unit='cm')) +
+                ylab(expression(italic(c) * '(x)' * 
+                                  ' ('*g*' '*cm^{-3}* ')'))+
+               # ylab("Carbon Concentration (g/cm3)")+
+               xlab('Days after the treatment')
+
+ ggsave(file.path(FigureOutput, 'Dynamics of carbon concentration.jpg'), 
+        width = 16, height = 11, units = "cm")
+
+ggsave(file.path(FigureOutput, 'Dynamics of carbon concentration.pdf'), 
+        width = 16, height = 11, units = "cm")
+
+
+```
+#combine data
+```{r label, options}
+
+# library(data.table)
+read.files <- function(file.directory, subject) {
+   # file.directory <- ExpData
+   # subject <- "Plant-level_"
+   file_list <- 
+     list.files(file.directory) %>% 
+      .[grepl(subject, .)]
+   # filter the files
+  
+  temp.a = 1
+
+  for (file in file_list){
+
+    # file = "Plant-level_0_1_NO_stress.csv"  
+    temp_dataset <-
+      read_csv(file.path(file.directory, file)) 
+      
+
+    temp_dataset$method <- sapply(strsplit(gsub(".csv", "", file), "_"), 
+                                function(x){x[3]}) 
+
+    if(temp.a == 1) {dataset = temp_dataset; temp.a =2 }
+
+    else if(temp.a != 1)
+    {
+      if(dim(temp_dataset)[1] >= 910)
+        {
+      dataset <-
+        rbind(dataset, temp_dataset)
+      }
+
+    }
+  }
+
+  return(dataset)
+}
+
+  
+
+
+
+```
+
+
+
+# Simulated daily loading figure
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=FALSE, message=FALSE, eval = TRUE}
+loading.data <- 
+read.files(ExpData, "Plant-level_") %>%
+  rename(day = "day(d)") %>% 
+  select(day, 'hourOfDay)', scenario,method, fraction_leafLoading, fraction_fineRootLoading, 
+         fraction_structuralRootLoading, fraction_stemLoading) %>% 
+  group_by(day, scenario, method) %>%
+  summarise_at(c('fraction_leafLoading', 'fraction_fineRootLoading',
+         'fraction_structuralRootLoading', 'fraction_stemLoading'), mean)%>%
+  rename(Leaf = 'fraction_leafLoading',
+         'Fine root' = 'fraction_fineRootLoading',
+         "Structural root" = 'fraction_structuralRootLoading',
+         Stem = 'fraction_stemLoading') %>%
+  mutate(treatment = case_when(
+    scenario == 0 ~ "100 leaves",
+    scenario == 1 ~ "25 leaves",
+    scenario == 2 ~ "No leaves")) 
+
+
+loading.plot <- 
+loading.data %>%
+  ungroup() %>% 
+  filter(method == '1') %>% 
+  select(-scenario) %>% 
+  gather("organ", "value", -day, -treatment, -method ) %>% 
+  mutate(value = value * 100) %>% 
+  mutate(organ = factor(organ, levels = c("Leaf", 'Fine root',
+                            "Stem", "Structural root"))) 
+  
+
+p1 <- 
+  loading.plot %>% 
+     ggplot(data=., aes(day, value, color = organ ))+ 
+      scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07",  "#52854C")) + 
+        geom_line()+
+        # annotate(geom="text", x=0.1, y = 100, label = "(a)")+
+        facet_wrap(~treatment,ncol = 1)+
+        theme_bw() + 
+        theme(
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          legend.title= element_text(size=0), 
+          legend.justification = 0.5,
+          legend.background = element_rect(fill = "#ffffff"),
+          legend.text = element_text(size=8),
+          legend.key.size = unit(0.4, "cm"),
+          legend.position = c(0.25, 0.85),
+          legend.box = "vertical"  ) +
+          ylab(expression('Percentage of carbon loading (%)'))+
+         # ylab("Carbon Concentration (g/cm3)")+
+         xlab('Days after the treatment')+
+        theme(text = element_text(size=12)) 
+
+# ggsave(file.path(FigureOutput, "Percentage of loading.jpg"), width = 14, height = 10, units = "cm")
+ 
+```
+
+# Simulated daily unloading rates in root and berry for 25 leaves treatment
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=FALSE, message=FALSE, eval = TRUE}
+unloading.data <- 
+read.files(ExpData, "Plant-level_") %>%
+  rename(day = "day(d)") %>% 
+  select(day, 'hourOfDay)', scenario,method, 
+         fraction_berryUnloading,
+         fraction_fineRootUnloading, 
+         fraction_structuralRootUnloading, 
+         fraction_stemUnloading) %>% 
+  group_by(day, scenario, method) %>%
+  summarise_at(c('fraction_berryUnloading', 'fraction_fineRootUnloading',
+         'fraction_structuralRootUnloading', 'fraction_stemUnloading'), mean)%>%
+  rename('Fine root' = 'fraction_fineRootUnloading',
+         "Structural root" = 'fraction_structuralRootUnloading',
+         Stem = 'fraction_stemUnloading',
+         Berry = 'fraction_berryUnloading') %>%
+  mutate(treatment = case_when(
+    scenario == 0 ~ "100 leaves",
+    scenario == 1 ~ "25 leaves",
+    scenario == 2 ~ "No leaves")) 
+
+unloading.plot <- 
+ unloading.data %>%
+  ungroup() %>% 
+  filter(method == '1') %>% 
+  select(-scenario) %>% 
+  gather("organ", "value", -day, -treatment, -method ) %>% 
+  mutate(value = value * 100) 
+  
+
+p2 <- 
+unloading.plot %>% 
+     ggplot(data=., aes(day, value, color = organ ))+ 
+        geom_line()+
+        scale_color_manual(values = c("#293352", "#E7B800", "#FC4E07",  "#52854C")) + 
+        facet_wrap(~treatment,ncol = 1)+
+        theme_bw() + 
+        theme(
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(),
+          legend.title= element_text(size=0), 
+          legend.justification = 0.5,
+          legend.background = element_rect(fill = "#ffffff"),
+          legend.text = element_text(size=8),
+          legend.key.size = unit(0.4, "cm"),
+          legend.position = c(0.25, 0.85),
+          legend.box = "vertical"  ) +
+          ylab(expression('Percentage of carbon unloading (%)'))+
+         # ylab("Carbon Concentration (g/cm3)")+
+         xlab('Days after the treatment')+
+  theme(text = element_text(size=12)) 
+
+p3=grid.arrange(p1, p2, ncol = 2)
+
+
+
+ggsave(file.path(FigureOutput, "Percentage of loading and unloading.jpg"), p3, width = 17, height = 17, units = "cm")
+```
+
+##The diurnal dynamics of carbon concentration at different positions
+```{r , echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, tidy=TRUE}
+
+common.0 <- 
+    read_csv(file.path(ExpData, 'Carbon-Potential_0_2_NO_stress.csv')) %>% 
+    rename(day = "day(d)") %>% 
+    filter(day <= 5) %>% 
+    mutate( CP = pb.c_concentration) %>%
+    select( day, hourOfDay, scenario, CP)
+
+common.1 <- 
+    read_csv(file.path(ExpData, 'Carbon-Potential_1_2_NO_stress.csv')) %>% 
+    rename(day = "day(d)") %>% 
+    filter(day <= 5) %>%
+    mutate( CP = pb.c_concentration) %>%
+    select( day, hourOfDay, scenario, CP)
+
+common.2 <- 
+    read_csv(file.path(ExpData, 'Carbon-Potential_2_2_NO_stress.csv')) %>% 
+    rename(day = "day(d)") %>% 
+    filter(day <= 5) %>%
+    mutate( CP = pb.c_concentration) %>%
+    select( day, hourOfDay,scenario, CP)
+
+temp <- 
+  read_csv(file.path(ExpData, 'Plant-level_2_1_NO_stress.csv')) %>% 
+  rename(day = "day(d)", Ta = "Ta (degree)", hourOfDay ="hourOfDay)") %>% 
+  select(day, hourOfDay, scenario, Ta) %>% 
+  filter(day <= 5) %>%
+  mutate(treatment = 'Air temperature', organ = 'Trunk') %>% 
+  rename(CC = Ta)
+# add a daily mean temperature figure
+ data_poten_s0 <- 
+  read_csv(file.path(ExpData, 'Carbon-Potential_0_1_NO_stress.csv'))%>% 
+                  rename(day = "day(d)") %>% 
+                  filter(day <= 5) %>%
+                  mutate( Int_3 = sqrt(2*int3.cpt),Int_10 = sqrt(2*int10.cpt),
+                         'Fine root' = sqrt(2*root.cpt), Trunk = sqrt(2*trunk.cpt)) %>%
+                  select(scenario, day, hourOfDay,'Int_3','Int_10', 'Fine root', 'Trunk') %>% 
+                  left_join(., common.0, by = c('day', 'hourOfDay', 'scenario')) %>% 
+                  gather("organ", "CC",Int_3, Int_10, CP,
+                         'Fine root', Trunk, -day, -scenario, -hourOfDay) %>% 
+                  mutate(treatment = "100 leaves")      
+  
+ data_poten_s1 <- 
+  read_csv(file.path(ExpData, 'Carbon-Potential_1_1_NO_stress.csv'))%>% 
+                  rename(day = "day(d)") %>% 
+                  filter(day <= 5) %>%
+                  mutate( Int_3 = sqrt(2*int3.cpt),Int_10 = sqrt(2*int10.cpt),
+                         'Fine root' = sqrt(2*root.cpt), Trunk = sqrt(2*trunk.cpt)) %>%
+                  select(scenario, day, hourOfDay,'Int_3','Int_10', 'Fine root', 'Trunk') %>% 
+                  left_join(., common.1, by = c('day', 'hourOfDay', 'scenario')) %>% 
+                  gather("organ", "CC",Int_3, Int_10, CP,
+                         'Fine root', Trunk, -day, -scenario, -hourOfDay) %>% 
+                  mutate(treatment = "25 leaves") 
+
+ data_poten_s2 <-
+  read_csv(file.path(ExpData, 'Carbon-Potential_2_1_NO_stress.csv'))%>% 
+                  rename(day = "day(d)") %>% 
+                  filter(day <= 5) %>%
+                  mutate( Int_3 = sqrt(2*int3.cpt),Int_10 = sqrt(2*int10.cpt),
+                         'Fine root' = sqrt(2*root.cpt), Trunk = sqrt(2*trunk.cpt)) %>%
+                  select(scenario, day, hourOfDay,'Int_3','Int_10', 'Fine root', 'Trunk') %>% 
+                  left_join(., common.2, by = c('day', 'hourOfDay', 'scenario')) %>% 
+                  gather("organ", "CC",Int_3, Int_10, CP,
+                         'Fine root', Trunk, -day, -scenario, -hourOfDay) %>% 
+                  mutate(treatment = "No leaves")        
+ 
+carbon_con <- 
+  bind_rows(data_poten_s0, data_poten_s1, data_poten_s2, temp) %>% 
+  mutate(treatment = factor(treatment, levels = c("100 leaves", '25 leaves',
+                            "No leaves", "Air temperature"))) %>% 
+  mutate(day = day + hourOfDay/24)
+                  
+  carbon_con %>% 
+   ggplot(data=., aes(day, CC, color = organ))+ 
+      geom_line()+
+      facet_wrap(~treatment,ncol = 2, scales = "free_y")+
+      theme_bw() + 
+      theme(
+                panel.grid.major = element_blank(), 
+                panel.grid.minor = element_blank(),
+                legend.title= element_text(size=0), 
+                legend.justification = 0.5,
+                legend.background = element_rect(fill = "#ffffff"),
+                legend.text = element_text(size=11),
+                legend.key.size = unit(0.67, "cm"),
+                legend.position = "bottom", #c(0.26, 0.67),
+                legend.box = "horizontal",
+                legend.margin=margin(t = 0, unit='cm')) +
+                ylab(expression(italic(c) * '(x)' * 
+                                  ' ('*g*' '*cm^{-3}* ')'))+
+
+               # ylab("Carbon Concentration (g/cm3)")+
+               xlab('Days after the treatment')
+
+ ggsave(file.path(FigureOutput, 'Dynamics of diurnal carbon concentration.new.jpg'),
+         width = 16, height = 11, units = "cm")
+
+  ggsave(file.path(FigureOutput, 'Dynamics of diurnal carbon concentration.new.pdf'),
+         width = 16, height = 11, units = "cm")
+
+
+```
+
+
+
+# Simulated daily loading rate figure
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=FALSE, message=FALSE, eval = TRUE}
+loading.rate <- 
+read.files(ExpData, "Plant-level_") %>%
+  rename(day = "day(d)") %>% 
+  select(day, scenario,method, 'leafLoading(mgC)', 'RootLoading',
+                 'structuralRootLoading', 'stemLoading') %>% 
+  rename(leafLoading = 'leafLoading(mgC)') %>% 
+  group_by(day, scenario, method) %>%
+  summarise_at(c('leafLoading', 'RootLoading',
+                 'structuralRootLoading', 'stemLoading'), sum)%>%
+  rename(Leaf = 'leafLoading',
+         'Fine root' = 'RootLoading',
+         "Structural root" = 'structuralRootLoading',
+         Stem = 'stemLoading') %>%
+  mutate(treatment = case_when(
+    scenario == 0 ~ "100 leaves",
+    scenario == 1 ~ "25 leaves",
+    scenario == 2 ~ "No leaves")) 
+
+
+loading.plot <- 
+loading.rate %>%
+  ungroup() %>% 
+  filter(method == '1') %>% 
+  select(-scenario) %>% 
+  gather("organ", "value", -day, -treatment, -method ) %>% 
+  mutate(value = value)%>% 
+  mutate(organ = factor(organ, levels = c("Leaf", 'Fine root',
+                            "Stem", "Structural root"))) 
+p1 <- 
+loading.plot %>% 
+           ggplot(data=., aes(day, value, color = organ ))+ 
+              geom_line()+
+              scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07",  "#52854C")) + 
+              facet_wrap(~treatment,ncol = 1, scales = 'free_y')+
+              theme_bw() + 
+              theme(
+                panel.grid.major = element_blank(), 
+                panel.grid.minor = element_blank(),
+                legend.title= element_text(size=0), 
+                legend.justification = 0.5,
+                legend.background = element_rect(fill = "#ffffff"),
+                legend.text = element_text(size=8),
+                legend.key.size = unit(0.4, "cm"),
+                legend.position = c(0.25, 0.85),
+                legend.box = "vertical"  ) +
+                ylab(expression('Rate of loading (mgC/day)'))+
+               # ylab("Carbon Concentration (g/cm3)")+
+               xlab('Days after the treatment') +
+  theme(text = element_text(size=12)) 
+
+# ggsave(file.path(FigureOutput, "rate of loading.jpg"), width = 14, height = 10, units = "cm")
+ 
+```
+
+
+
+# Simulated daily unloading rate figure
+```{r, warning=FALSE, echo=FALSE, tidy=TRUE, error=FALSE, message=FALSE, eval = TRUE}
+unloading.rate <- 
+read.files(ExpData, "Plant-level_") %>%
+  rename(day = "day(d)") %>% 
+  select(day, scenario,method,
+         'fineRootUnloading(mgC)', 'totalBerryUnloading(mgC)',
+                 'structuralRootUnloading', 'stemUnloading') %>% 
+  group_by(day, scenario, method) %>%
+  summarise_at(c('fineRootUnloading(mgC)', 'totalBerryUnloading(mgC)',
+                 'structuralRootUnloading', 'stemUnloading'), sum)%>%
+  rename('Fine root' = 'fineRootUnloading(mgC)',
+         "Structural root" = 'structuralRootUnloading',
+         Berry = 'totalBerryUnloading(mgC)',
+         Stem = 'stemUnloading') %>%
+  mutate(treatment = case_when(
+    scenario == 0 ~ "100 leaves",
+    scenario == 1 ~ "25 leaves",
+    scenario == 2 ~ "No leaves")) 
+
+
+unloading.plot <- 
+unloading.rate %>%
+  ungroup() %>% 
+  filter(method == '1') %>% 
+  select(-scenario) %>% 
+  gather("organ", "value", -day, -treatment, -method ) %>% 
+  mutate(value = value)
+p2 <- 
+unloading.plot %>% 
+           ggplot(data=., aes(day, value, color = organ ))+ 
+              geom_line()+
+  scale_color_manual(values = c("#293352", "#E7B800", "#FC4E07",  "#52854C")) + 
+              facet_wrap(~treatment,ncol = 1, scales = 'free_y')+
+              theme_bw() +
+  
+              theme(
+                panel.grid.major = element_blank(), 
+                panel.grid.minor = element_blank(),
+                legend.title= element_text(size=0), 
+                legend.justification = 0.5,
+                legend.key=element_blank(),
+                legend.background = element_rect(fill = "#ffffff"),
+                legend.text = element_text(size=8),
+                legend.key.size = unit(0.4, "cm"),
+                legend.position = c(0.22, 0.85),
+                legend.box = "vertical"  ) +
+                ylab(expression('Rate of unloading (mgC/day)'))+
+               # ylab("Carbon Concentration (g/cm3)")+
+               xlab('Days after the treatment')+
+  theme(text = element_text(size=12)) 
+
+p3=grid.arrange(p1, p2, ncol = 2)
+
+
+ggsave(file.path(FigureOutput, "rate of loading and unloading.jpg"), p3, width = 17, height = 17, units = "cm")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

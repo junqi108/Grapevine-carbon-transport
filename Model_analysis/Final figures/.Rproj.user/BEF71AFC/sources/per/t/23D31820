@@ -1,0 +1,33 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1601427426337.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "23D31820",
+    "lastKnownWriteTime" : 19703527545831479,
+    "last_content_update" : 1601427426337,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "7D6A3C61",
+        "caption" : "biomass.dynamic",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=biomass.dynamic&cache_key=7D6A3C61",
+        "displayedObservations" : 38,
+        "environment" : "",
+        "expression" : "biomass.dynamic",
+        "object" : "biomass.dynamic",
+        "preview" : 0,
+        "totalObservations" : 38,
+        "variables" : 7
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}
