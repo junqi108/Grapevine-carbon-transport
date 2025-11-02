@@ -1,0 +1,570 @@
+#GP fit ploting
+#run it after run New_GP_fit
+
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+
+
+GP_data_fill <- fread("GP_data_2021_3_8.csv")
+names(GP_data_fill)
+
+#.SD self-reference of the data
+# .SD is itself a data.table (with the caveat that it does not allow assignment with :=)
+GP_data_fill[,1:10 := lapply(.SD, function(x) x/1000), .SDcols = 1:10]
+GP_data_fill[, structuralRootDM := structuralRootDM/1000]
+GP_data_fill[, structuralRootNSC := structuralRootNSC/1000]
+# GP_data_fill
+GP_data_fill[, totalRootDM := structuralRootDM + rootDM]
+
+GP_data_fill[, totalRootNSC:= structuralRootNSC + fineRootNSC][]
+
+
+cols <- c("HYDROLYSIS_RATE", "SYNTHESIS_RATE", "KM_RESERVES",
+          "KM_BERRY",  "KM_SECONDARY", "SEC_GROWTH_RATE") 
+
+
+max_par <- 
+   GP_data_fill[, c("HYDROLYSIS_RATE", "SYNTHESIS_RATE",
+                    "KM_RESERVES",  "KM_BERRY",
+                    "KM_SECONDARY", "SEC_GROWTH_RATE") ] %>% 
+   .[, lapply(.SD, max)] 
+
+
+min_par <- 
+   GP_data_fill[, c("HYDROLYSIS_RATE", "SYNTHESIS_RATE",
+                    "KM_RESERVES",  "KM_BERRY", 
+                    "KM_SECONDARY", "SEC_GROWTH_RATE") ] %>% 
+   .[, lapply(.SD, min)] 
+
+max_par
+min_par
+
+
+GP_data_fill[, Grp := .GRP, by = .(day, scenario)][] #create a new colum-GRP by day and scenario
+names(GP_data_fill)
+
+#### section 1 ####
+GP_data_fill.new <- 
+GP_data_fill %>% 
+  mutate(treatment = case_when(
+    scenario == 0 ~ "100 leaves",
+    scenario == 1 ~ "25 leaves",
+    scenario == 2 ~ "No leaves")) 
+data_obs_model <- 
+   data_obs_model %>% 
+   mutate(treatment = case_when(
+      scenario == 0 ~ "100 leaves",
+      scenario == 1 ~ "25 leaves",
+      scenario == 2 ~ "No leaves")) 
+
+
+p1 <- ggplot(GP_data_fill.new, aes(x=day, y=berryDM))  + 
+  geom_point() +
+  facet_wrap(~ treatment, ncol=3)+
+  theme(legend.position =  "none")+
+ 
+  geom_point(data=data_obs_model,aes(x=day, y=berryDM, col="red"))+
+  
+  facet_wrap(~treatment, ncol=3)  +
+  xlab("") + ylab("Bunch DM (g)")+
+  theme(
+    strip.text.x = element_text(
+      size = 15#, color = "red"
+    )) + 
+  theme_bw() + 
+  theme(
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    legend.position="none"
+  )
+
+p2 <- 
+ggplot(GP_data_fill.new, aes(x=day, y=totalRootNSC))  + 
+   geom_point() +
+   facet_wrap(~ treatment, ncol=3)+
+   theme(legend.position =  "none")+
+   
+   geom_point(data=data_obs_model,aes(x=day, y=totalRootNSC, col="red"))+
+   
+   facet_wrap(~ treatment, ncol=3)  +
+   xlab("") + ylab("Total root NSC (g)")+
+   theme(
+      strip.text.x = element_text(
+         size = 15#, color = "red"
+      ))+
+   theme_bw() + 
+   theme(
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(),
+      legend.position="none"
+   )
+
+ 
+#berryDM  rootDM   rootNSC  woodDM
+p3 <- 
+ggplot(GP_data_fill.new, aes(x=day, y=totalRootDM  ))  + 
+  geom_point() +
+  facet_wrap(~ treatment, ncol=3)+
+  theme(legend.position =  "none")+
+  
+  geom_point(data=data_obs_model,aes(x=day, y=totalRootDM, col="red"))+
+  
+  facet_wrap(~ treatment, ncol=3)  +
+  xlab("") + ylab("Total root DM (g)")+
+  theme(
+    strip.text.x = element_text(
+      size = 15#, color = "red"
+    ))+
+   theme_bw() + 
+   theme(
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(),
+      legend.position="none"
+   )
+
+
+#berryDM  rootDM   rootNSC  woodDM
+
+p4 <- 
+ggplot(GP_data_fill.new, aes(x=day, y=woodDM  ))  + 
+  geom_point() +
+  facet_wrap(~ treatment, ncol=3)+
+  theme(legend.position =  "none")+
+  geom_point(data=data_obs_model,aes(x=day, y=woodDM, col="red"))+
+  facet_wrap(~ treatment, ncol=3)  +
+  xlab("DAWS") + ylab("Trunk DM (g)")+
+  theme(
+    strip.text.x = element_text(
+      size = 15#, color = "red"
+    ))+  
+   theme_bw() + 
+   theme(
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(),
+      legend.position="none"
+   )
+
+p5=grid.arrange(p1, p2, p3, p4, ncol = 1)
+
+
+ggsave(file.path(FigureOutput, "Distribution of simulation results.jpg"), 
+       p5, width = 17, height = 25, units = "cm")
+
+#### section 2 ####
+library("GPfit")
+
+# library("lhs") 
+
+# computer_simulator <- function(x){
+#   x = 2 * x + 0.5
+#   y = sin(10 * pi * x) / (2 * x) + (x - 1)^4
+#   return(y)
+# }
+# 
+#  n <- 7 
+#  x <- maximinLHS(n, 1) 
+#  y <- matrix(0, n, 1) 
+#  for (i in 1:n) y[i] <- computer_simulator(x[i]) 
+#  GPmodel <- GP_fit(x, y)
+#  
+#  plot(GPmodel)
+#  xnew <- matrix(runif(20), ncol = 1) 
+#  predict(GPmodel, xnew) 
+#  
+#  
+#  bestpar=c(0.0015535,	0.001129946	,0.004650171,	0.002590118	)
+#  predict(as.list(Gp_combine_0[3])[[1]], bestpar) 
+ 
+
+
+##### 2. Input Observed data ####
+#observed data
+data_obs_model <- 
+   fread(file.path(ExpData, "Exp2015_Gerhard_biomass.csv"))
+
+data_obs_model[, Grp := .GRP, by = .(day, scenario)][]
+
+names(data_obs_model)
+data_obs_model[,c(2:8,10:11) := lapply(.SD, function(x) x/1000), 
+               .SDcols = c(2:8,10:11)]
+
+
+data_obs_model[day == 9 | day == 18 |day == 28 | day == 37]
+
+str(data_obs_model)
+
+
+
+
+
+
+################################################################
+# load the saved GP model from the previous run
+
+# Read GPfit results
+model_fit_0=readRDS('model_fit_0.rds', refhook = NULL)
+model_fit_1=readRDS('model_fit_1.rds', refhook = NULL)
+model_fit_2=readRDS('model_fit_2.rds', refhook = NULL)
+model_fit_3=readRDS('model_fit_3.rds', refhook = NULL)
+
+
+##### 3. GP fit for parameters and simulation results ####
+
+
+#### 4. combine gpfit results and observed data ####
+data_obs_model[, Grp := .GRP, by = .(day, scenario)][]
+
+#berryDM, rootDM, totalRootNSC, woodDM
+#berryDM, rootDM, totalRootNSC, woodDM
+scenario_sel = 2
+model_fit_0$mod_g
+
+Gp_combine_0 <- 
+   model_fit_0[data_obs_model[day!=0], 
+               on= c("day", "scenario")] %>% 
+   .[, c("scenario", "day", 'mod_g',  'berryDM')] 
+
+Gp_combine_1 <- 
+   model_fit_1[data_obs_model[day!=0 ], 
+               on= c("day", "scenario")] %>% 
+   .[, c("scenario", "day", 'mod_g',  'totalRootDM')]
+
+Gp_combine_2 <- 
+   model_fit_2[data_obs_model[day!=0], 
+               on= c("day", "scenario")] %>% 
+   .[, c("scenario", "day", 'mod_g',  'totalRootNSC')]
+
+Gp_combine_3 <- 
+   model_fit_3[data_obs_model[day!=0], 
+               on= c("day", "scenario")] %>% 
+   .[, c("scenario", "day", 'mod_g',  'woodDM')]
+
+
+ #assign the parameters
+ # par.d <- read.csv(file.path(IntResults, 'GP_result_two_scenarios_8-12.g.csv'), 
+ #                 header = T)
+ # par[1:4] <- as.vector(par.d[1, 1:4])
+library(dplyr)
+# par = c(0.0006,0.0006,0.003999997,0.0003,0.005334526,2.97E-06) #scenario 0
+par = c(0.001721825,0.000304167,0.004760733,0.00021578,0.00271198,7.97E-06) #scenario 1
+#par=c(0.00134409,0.000600001,0.003266067,0.0003,0.005999989,1.00E-06) #scenario 2
+
+ #berryDM  rootDM   rootNSC  woodDM
+ # berry DM
+str(par)
+# par.0 <- as.vector(par.0[,1])
+
+ cost.fun <- function(par) 
+ {
+    mod_gp <- as.list(Gp_combine_0$mod_g) 
+    obs_gp <- t(Gp_combine_0[,4])
+    y_hat_out  <- t( rep(0, length(mod_gp))) 
+    
+     for (i in 1:nrow(Gp_combine_0))
+    {
+       y_hat_gp <-  predict(mod_gp[[i]], matrix(par, ncol = 6))$Y_hat
+       y_hat_out[i]<- y_hat_gp
+    }
+   return(y_hat_out)
+   
+ }
+
+
+ simu0=cost.fun(par)
+ obs_gp0 <- t(Gp_combine_0[,4])
+ scenario<-t(Gp_combine_0[,1])
+ day<-t(Gp_combine_0[,2])
+ Varib  <- t( rep(c("BerryDM"), length(obs_gp0))) 
+ obs_pre0 <-
+   data.frame(t(rbind(obs_gp0,simu0,scenario,day,Varib )))  
+    
+names(obs_pre0)<-c("Obs", "Pre", "scenario", "day", "Varib")
+  
+ 
+ #rootDM 
+ 
+cost.fun <- function(par) 
+{
+   mod_gp <- as.list(Gp_combine_1$mod_g) 
+   obs_gp <- t(Gp_combine_1[,4])
+   y_hat_out  <- t( rep(0, length(mod_gp))) 
+   
+   for (i in 1:nrow(Gp_combine_1))
+   {
+      y_hat_gp <-  predict(mod_gp[[i]], matrix(par, ncol = 6))$Y_hat
+      y_hat_out[i]<- y_hat_gp
+   }
+   return(y_hat_out)
+   
+}
+
+   
+   
+   simu1=cost.fun(par)
+   obs_gp1 <- t(Gp_combine_1[,4])
+   scenario<-t(Gp_combine_1[,1])
+   day<-t(Gp_combine_1[,2])
+
+ Varib  <- t( rep(c("totalRootDM"),length(obs_gp1))) 
+ 
+ obs_pre1 <-
+   data.frame(t(rbind(obs_gp1,simu1,scenario,day,Varib )))  
+ 
+ names(obs_pre1)<-c("Obs", "Pre", "scenario", "day", "Varib")
+ 
+ #rootNSC 
+ 
+ cost.fun <- function(par) 
+ {
+    mod_gp <- as.list(Gp_combine_2$mod_g) 
+    obs_gp <- t(Gp_combine_2[,4])
+    y_hat_out  <- t( rep(0, length(mod_gp))) 
+    
+    for (i in 1:nrow(Gp_combine_2))
+    {
+       y_hat_gp <-  predict(mod_gp[[i]], matrix(par, ncol = 6))$Y_hat
+       y_hat_out[i]<- y_hat_gp
+    }
+    return(y_hat_out)
+    
+ }
+ 
+ 
+ 
+ simu2=cost.fun(par)
+ obs_gp2 <- t(Gp_combine_2[,4])
+ scenario<-t(Gp_combine_2[,1])
+ day<-t(Gp_combine_2[,2])
+ 
+ Varib  <- t( rep(c("totalRootNSC"),length(obs_gp2))) 
+ 
+ obs_pre2 <-
+   data.frame(t(rbind(obs_gp2,simu2,scenario,day,Varib )))  
+ 
+ names(obs_pre2)<-c("Obs", "Pre", "scenario", "day", "Varib")
+ 
+ #woodDM 
+ 
+ 
+ cost.fun <- function(par) 
+ {
+    mod_gp <- as.list(Gp_combine_3$mod_g) 
+    obs_gp <- t(Gp_combine_3[,4])
+    y_hat_out  <- t( rep(0, length(mod_gp))) 
+    
+    for (i in 1:nrow(Gp_combine_3))
+    {
+       y_hat_gp <-  predict(mod_gp[[i]], matrix(par, ncol = 6))$Y_hat
+       y_hat_out[i]<- y_hat_gp
+    }
+    return(y_hat_out)
+    
+ }
+ 
+ 
+ 
+ simu3=cost.fun(par)
+ obs_gp3 <- t(Gp_combine_3[,4])
+ scenario<-t(Gp_combine_3[,1])
+ day<-t(Gp_combine_3[,2])
+ 
+ Varib  <- t( rep(c("woodDM"),length(obs_gp3))) 
+ 
+ obs_pre3 <-
+    data.frame(t(rbind(obs_gp3,simu3,scenario,day,Varib )))  
+ 
+ names(obs_pre3)<-c("Obs", "Pre", "scenario", "day", "Varib")
+ 
+ 
+ 
+ 
+ 
+ 
+ obs_pre<-
+    rbind(obs_pre0,obs_pre1,obs_pre2,obs_pre3) %>% 
+    mutate_at(c('Obs',"Pre", "day"), 
+              funs(as.numeric(as.character(.))))
+ 
+ obs_pre
+ 
+ names(obs_pre)
+ 
+ ggplot(obs_pre, aes(x=day, y=as.numeric(Pre)  ))  + 
+   geom_point() +
+   facet_wrap(~ Varib*scenario, ncol=3, scales = 'free_y')+
+   theme(legend.position =  "none")+
+    
+   
+   geom_point(data=obs_pre,aes(x=day, y=as.numeric(Obs), col="red"))+
+   
+   facet_wrap(~ Varib*scenario, ncol=3)  +
+   xlab("DAWS") + ylab("berryDM (g)")+
+   theme(
+     strip.text.x = element_text(
+       size = 15#, color = "red"
+     ))
+ errordata=as.numeric(obs_pre$Pre)- as.numeric(obs_pre$Obs)
+ rmse <- sqrt( sum((errordata) ^2)/length(obs_pre$Obs))
+ rmse
+ 
+ fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre)
+ summary(fit.gpfit)
+ 
+ p1=
+    
+    ggplot(obs_pre, aes(x=as.numeric(Obs), 
+                        y=as.numeric(Pre), 
+                        col= Varib,shape=scenario, size=2 ))  + 
+   geom_point() +
+   xlim(0,600)+
+   ylim(0,600)+
+   #facet_wrap(~ Varib)+
+  # theme(legend.position =  "none")+
+   geom_abline(slope=1,intercept=0)+
+   geom_abline(slope=fit.gpfit$coefficients[2],intercept=fit.gpfit$coefficients[1], col=2)+
+   annotate("text", label = "RMSE = 18.9 ", x =550 , y = 390, size = 5 )+
+   annotate("text", label = "Intercept = 5.2 ", x = 555 , y = 370, size = 5 )+
+   annotate("text", label = "Slope = 0.95 ", x = 550 , y = 350, size = 5 )+
+   annotate("text", x = 540, y =330, label = "italic(R) ^ 2 == 0.99 ",size=5,
+            parse = TRUE)+
+   guides(size = FALSE)+
+   xlab("observed (g)") + ylab("predicted (g)")+
+   theme(
+     strip.text.x = element_text(
+       size = 15#, color = "red"
+     ))+
+   theme(legend.position = c(0.8, 0.3))
+ 
+ ggsave(file="fig1_gpfit.jpg", p1, width = 8, height =8)
+ 
+ ##### plot for each variable ####
+ 
+ errordata=as.numeric(obs_pre0$Pre)- as.numeric(obs_pre0$Obs)
+ rmse <- sqrt( sum((errordata) ^2)/length(obs_pre0$Obs))
+ rmse
+ 
+ fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre0)
+ summary(fit.gpfit)
+ 
+ p1=
+    ggplot(obs_pre0, aes(x=as.numeric(Obs), y=as.numeric(Pre), col=day,shape=scenario, size=2 ))  + 
+   geom_point() +
+   xlim(200,600)+
+   ylim(200,600)+
+   #facet_wrap(~ Varib)+
+     theme(legend.position =  "none")+
+   geom_abline(slope=1,intercept=0)+
+   geom_abline(slope=fit.gpfit$coefficients[2],intercept=fit.gpfit$coefficients[1], col=2)+
+   annotate("text", label = "(a) BerryDM", x = 255, y = 600, size = 5 )+
+   annotate("text", label = "RMSE = 27.1 ", x =260 , y = 570, size = 5 )+
+   annotate("text", label = "Intercept = -39.7 ", x = 265 , y = 540, size = 5 )+
+   annotate("text", label = "Slope = 1.06 ", x = 260 , y = 510, size = 5 )+
+   annotate("text", x = 260, y =480, label = "italic(R) ^ 2 == 0.96 ",size=5,
+            parse = TRUE)+
+   guides(size = FALSE)+
+   xlab("observed (g)") + ylab("predicted (g)")+
+   theme(
+     strip.text.x = element_text(
+       size = 15#, color = "red"
+     )) 
+ 
+ p1
+ 
+ # errordata=as.numeric(obs_pre1$Pre)- as.numeric(obs_pre1$Obs)
+ # rmse <- sqrt( sum((errordata) ^2)/length(obs_pre1$Obs))
+ # rmse
+ # 
+ # fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre1)
+ # summary(fit.gpfit)
+ # 
+ # # p2=
+ #   ggplot(obs_pre1, aes(x=as.numeric(Obs), y=as.numeric(Pre), col=day,shape=scenario, size=2 ))  + 
+ #   geom_point() +
+ #   xlim(200,400)+
+ #   ylim(200,400)+
+ #   #facet_wrap(~ Varib)+
+ #   theme(legend.position =  "none")+
+ #   geom_abline(slope=1,intercept=0)+
+ #   geom_abline(slope=fit.gpfit$coefficients[2],intercept=fit.gpfit$coefficients[1], col=2)+
+ #   annotate("text", label = "(b) totalRootDM", x = 150, y = 500, size = 5 )+
+ #   annotate("text", label = "RMSE = 23.7 ", x =160 , y = 470, size = 5 )+
+ #   annotate("text", label = "Intercept = 32.0 ", x = 165 , y = 440, size = 5 )+
+ #   annotate("text", label = "Slope = 0.87 ", x = 160 , y = 410, size = 5 )+
+ #   annotate("text", x = 160, y =380, label = "italic(R) ^ 2 == 0.75 ",size=5,
+ #            parse = TRUE)+
+ #   guides(size = FALSE)+
+ #   xlab("observed (g)") + ylab("predicted (g)")+
+ #   theme(
+ #     strip.text.x = element_text(
+ #       size = 15#, color = "red"
+ #     )) 
+ # p2
+ # 
+ errordata=as.numeric(obs_pre2$Pre)- as.numeric(obs_pre2$Obs)
+ rmse <- sqrt( sum((errordata) ^2)/length(obs_pre2$Obs))
+ rmse
+ 
+ fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre2)
+ summary(fit.gpfit)
+ 
+ p3=ggplot(obs_pre2, aes(x=as.numeric(Obs), y=as.numeric(Pre), col=day,shape=scenario, size=2 ))  + 
+   geom_point() +
+   xlim(0,60)+
+   ylim(0,60)+
+   #facet_wrap(~ Varib)+
+   theme(legend.position =  "none")+
+   geom_abline(slope=1,intercept=0)+
+   geom_abline(slope=fit.gpfit$coefficients[2],intercept=fit.gpfit$coefficients[1], col=2)+
+   annotate("text", label = "(b) TotalRootNSC", x =  12, y = 60, size = 5 )+
+   annotate("text", label = "RMSE = 6.97 ", x = 16 , y =  56, size = 5 )+
+   annotate("text", label = "Intercept = 0.32 ", x =  16 , y =  52, size = 5 )+
+   annotate("text", label = "Slope = 1.16 ", x =  15 , y =  48, size = 5 )+
+   annotate("text", x =  15, y = 44, label = "italic(R) ^ 2 == 0.82 ",size=5,
+            parse = TRUE)+
+   guides(size = FALSE)+
+   xlab("observed (g)") + ylab("predicted (g)")+
+   theme(
+     strip.text.x = element_text(
+       size = 15#, color = "red"
+     )) 
+ p3
+ 
+ 
+ errordata=as.numeric(obs_pre3$Pre)- as.numeric(obs_pre3$Obs)
+ rmse <- sqrt( sum((errordata) ^2)/length(obs_pre3$Obs))
+ rmse
+ 
+ fit.gpfit<-lm(as.numeric(Pre)~ as.numeric(Obs), data=obs_pre3)
+ summary(fit.gpfit)
+ 
+ p4=ggplot(obs_pre3, aes(x=as.numeric(Obs), y=as.numeric(Pre), col=day,shape=scenario, size=2 ))  + 
+   geom_point() +
+   xlim(80,160)+
+   ylim(80,160)+
+   #facet_wrap(~ Varib)+
+   theme(legend.position =  "none")+
+   geom_abline(slope=1,intercept=0)+
+   geom_abline(slope=fit.gpfit$coefficients[2],intercept=fit.gpfit$coefficients[1], col=2)+
+   annotate("text", label = "(c) TrunkDM", x =  100, y = 160, size = 5 )+
+   annotate("text", label = "RMSE = 9.03 ", x = 105 , y =  155, size = 5 )+
+   annotate("text", label = "Intercept = 7.60 ", x =  108 , y =  150, size = 5 )+
+   annotate("text", label = "Slope = 0.95 ", x =  105 , y =  145, size = 5 )+
+   annotate("text", x =  100, y = 140, label = "italic(R) ^ 2 == 0.48 ",size=5,
+            parse = TRUE)+
+   guides(size = FALSE)+
+   xlab("observed (g)") + ylab("predicted (g)")+
+   theme(
+     strip.text.x = element_text(
+       size = 15#, color = "red"
+     )) +theme(legend.position = c(0.8, 0.35))
+   
+ p4
+ 
+ 
+ 
+ p5=grid.arrange(p1, p2,p3, p4,nrow = 2)
+ ggsave(file="fig2_gpfit2.jpg", p5, width = 10, height =10)
+ 
+
+  

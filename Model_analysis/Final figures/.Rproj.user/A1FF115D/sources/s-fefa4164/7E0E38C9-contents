@@ -1,0 +1,469 @@
+---
+title: "Validating the yield prediction"
+author: "Junqi ZHU"
+output:
+  html_notebook
+editor_options: 
+  chunk_output_type: inline
+  
+  # steps: 
+  # 1. update the meteo files
+  # 2. calculate the mean meteo values based on the critical period that optimized before for each component
+  # 3. output the meteo value table for each component
+---
+
+```{r, warning=TRUE, echo=FALSE, tidy=TRUE, error=FALSE, message=FALSE}
+ rm(list = ls())
+    {
+    library(plyr)
+    l_ply(list('tidyverse','readxl','tidyr','dplyr','readr','ggplot2','broom','ggthemes','plotly','purrr',
+               'reshape2','cowplot','grid', 'reshape2','lubridate', 'RColorBrewer', 
+                 'datacheck','stringr','DEoptim', 'lme4','lmerTest', 'lmtest'), 
+          require, character.only = T)
+    # tidyverse_update(recursive = FALSE) #updating packages
+    #get the current working directory
+    MainDir <- list(PROJHOME = normalizePath(getwd()))
+    # Input and output directory data file location
+    ExpData = file.path(MainDir, 'ExpData')
+    # figure output directory, mainly the the place for paper writing 
+    FigureOutput = file.path(MainDir, 'Figures')
+    
+    # Output directory, final results except figures, like statistics, and intermediate data set
+    IntermediateResults = file.path(MainDir, 'Intermediate results')  
+    SupportingFunctions = file.path(MainDir, 'Supporting functions')
+    
+    
+   if(grepl('powerplant', MainDir) == T)
+    {
+    LibFunctions = file.path('/powerplant/workspace/hrmjxz/Programming_lang/R_language/Function_library/')
+    } else
+     {
+    LibFunctions = file.path("w:/Programming_lang/R_language/Function_library/")
+    }
+    
+    # Load all functions
+    source(file.path(LibFunctions,'Customized_functions_for_climate.R'))
+    source(file.path(LibFunctions,'Customized_curve_fitting_functions.R'))
+    source(file.path(LibFunctions,'Customized_functions_data_reconstruction.R'))
+    
+    source(file.path(SupportingFunctions,'Layout_of_ggplot.R'))
+    source(file.path(SupportingFunctions,'Specific_functions.R'))
+    # lsf.str()  #list of functions
+    } 
+```
+
+
+# A remind of the subject that you are working on
+```{r}
+current.variety <- 'SBL'
+current.subject <- 'yield_pred'
+
+
+output.name <- paste(current.variety, current.subject,  sep = "_")
+print(output.name)
+
+
+```
+#load the climatic data, add thermal time calculation
+```{r, warning=FALSE, echo=FALSE, error=FALSE, message=FALSE}
+met.data <- 
+  read.csv(file.path(ExpData, 'MetData_latest.csv'),
+           header = T) %>%
+  filter(station %in% c("Booker","OYB","Seaview","Squire")) %>% 
+  mutate(phenology.vineyard.name = station) 
+
+short_summary(met.data)
+
+met.data %>% 
+  filter(year == 2021) %>% 
+   filter(phenology.vineyard.name == "Booker")
+
+
+
+```
+#load the phenology information
+```{r, warning=FALSE, echo=FALSE, error=FALSE, message=FALSE}
+
+calcDoyJuly1st(2020, yday("2020-12-4"))
+
+
+flowering.date.mal <-  
+  read_csv(file.path(ExpData, 'Marlborough_SB_PhenologyObs.organized.csv')) %>% 
+  setNames(.,gsub(" ",".",tolower(names(.)))) %>% 
+  rename(floweringDOY.Jul1 = floweringdoy) %>% 
+  mutate(phenology.vineyard.name = site) %>% 
+  select(-simulationname, -currentstagename) %>% 
+  mutate(phenology.vineyard.name = 
+           if_else(phenology.vineyard.name == "Oyster Bay", 
+                   'OYB', phenology.vineyard.name)) 
+
+glimpse(flowering.date.mal)
+
+# 
+# flowering.date.mal %>% 
+#   filter(phenology.vineyard.name == "Booker")
+
+
+```
+
+#calculations for the met data
+```{r, warning=FALSE, echo=FALSE, error=FALSE, message=FALSE}
+# a target WangEngel thermal time define the minimum number of days for reaching the target phenology
+# phase when the temperature is optimum
+# The thermal time means the thermal time requirement with account the temperature response
+optTemp = 28
+minTemp = 4
+maxTemp = 40
+ met.data.org <-
+  met.data %>% 
+  mutate(season = paste(year, sep='-',year+1)) %>% #just temporary give a name, will be replaced by the following function
+  do(DOY.from.July1st(.)) %>% 
+  mutate(wangEngel.thermal.unit = WangEngelTempFunction(Tmean, minTemp, optTemp, maxTemp),
+         thermalTime = wangEngel.thermal.unit ) %>% 
+  arrange(phenology.vineyard.name, season, doy.july1st) %>% 
+  group_by(phenology.vineyard.name, season) %>%  
+  mutate(cum.thermal.time =cumsum(thermalTime)) 
+ 
+ 
+ 
+short_summary(met.data.org)
+
+
+met.data.org %>% 
+  filter(season == "2021-2022") 
+```
+# flowering time
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+ 
+# adding the new season
+ new.season <-
+  data_frame(season = '2021-2022',
+             station = c('Booker',"OYB", 'Seaview', 'Squire'),
+             floweringDOY.Jul1 = as.numeric(''),
+             f50 = as.numeric(''),
+             previous.season = '2020-2021')
+
+  
+
+f.50 <- 
+  left_join(met.data.org, flowering.date.mal, 
+          by = c('season', 'phenology.vineyard.name', 
+                 'previous.season')) %>%
+  group_by(season) %>% 
+  mutate(f50 = if_else(doy.july1st==floweringDOY.Jul1,
+                       cum.thermal.time, 0)) %>% 
+  filter(f50 > 0) %>% 
+  select(season, station, floweringDOY.Jul1, f50,previous.season) %>% 
+  bind_rows(.,new.season) %>%
+  mutate(f50 = if_else(is.na(f50), 44.05, f50)) %>% 
+  ungroup(.) %>% 
+  arrange(season) %>% 
+  group_by(station) %>% 
+  mutate(pre.f50 = lag(f50)) %>% 
+  arrange(station)
+
+ f.50 %>% 
+   filter(season == '2021-2022')
+
+met.data.org %>% 
+  filter(season == "2021-2022") %>% 
+  group_by(phenology.vineyard.name) %>% 
+  filter(cum.thermal.time ==max(cum.thermal.time)) %>% 
+  select(cum.thermal.time) 
+  # mutate(good_to_predict = cum.thermal.time -70)
+
+
+glimpse(f.50)
+```
+# veraison time
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+
+f.8 <- 
+  left_join(met.data.org, flowering.date.mal, 
+          by = c('season', 'phenology.vineyard.name')) %>%
+  group_by(season) %>% 
+  mutate(f8 = if_else(doy == veraisondoy, cum.thermal.time, 0)) %>% 
+  filter(f8 > 0) %>% 
+  select(season, station, veraisondoy, f8)
+
+```
+# combine the phenology data with met data
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+int.data <- 
+  full_join(met.data.org, f.50,  
+          by = c('season', 'station', 'previous.season')) %>%
+  full_join(., f.8) %>%
+  mutate(f50 = if_else(is.na(f50), 44.05, f50)) %>%
+  mutate(f8 = if_else(is.na(f8), 82.17, f8)) 
+# filter(year>=2004) %>%
+  # filter(season == '2020-2021')
+          
+ glimpse(int.data)
+  # calcMeanMetVal
+  
+ 
+ flowering.critial.period <- 
+ int.data %>% 
+    group_by(season, station) %>% 
+    do(calcMeanMetVal(.$station[1],
+                       .$season[1], .$f50[1], 
+                        15.9, 
+                        1.3)) %>% 
+  filter(yearmin >= 2005) %>% 
+  filter(yearmin <= 2022) %>% 
+  drop_na(yearmin) %>% 
+  mutate(start.date = as.Date(doymin, origin = paste(yearmin, "1-1", sep = '-'))) %>% 
+  mutate(end.date = as.Date(doymax, origin = paste(yearmin, "1-1", sep = '-'))) %>% 
+  select(season, station, yearmin, start.date, end.date) %>% 
+  ungroup() 
+ 
+ write_csv(flowering.critial.period, file.path(IntermediateResults, "flowering.critial.period.csv"))
+```
+#bunch number critical period 
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+# calcMeanMetVal('1997-1998', 44, 10, 10 )
+current.subject = 'BunchNum'
+
+climate.data <- NULL
+for(elt in c( "TmaxIni", "RadIni")){
+  
+  climate.data.temp <- 
+    int.data %>% 
+    group_by(season, station) %>% 
+    do(calcMetFactors(., elt))
+  
+  if(is_empty(climate.data)==T) { 
+    climate.data <- climate.data.temp}
+  else {
+  climate.data <- 
+    left_join(climate.data, climate.data.temp, by = c("season", 'station'))
+  }
+}
+# climate.data %>% 
+#   short_summary()
+climate.data.1 <- 
+  climate.data %>% 
+  rename(bunchNb.Tmax = TmaxIni, bunchNb.Rad = RadIni) %>% 
+  drop_na(bunchNb.Tmax)
+
+
+write_csv(climate.data.1, file.path(IntermediateResults, 
+                                  paste(output.name, current.subject,
+                                        "_meteo_values.csv", sep = '')))
+
+
+ climate.data.all <- climate.data.1
+ 
+
+
+```
+#berry number critical period 
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+# calcMeanMetVal('1997-1998', 44, 10, 10 )
+current.subject = 'BerryNum'
+
+climate.data <- NULL
+for(elt in c( "TmeanFlow", "RainTotFlow", 'TmaxIni')){
+  
+  climate.data.temp <- 
+    int.data %>% 
+    group_by(season, station) %>% 
+    do(calcMetFactors(., elt))
+  if(is_empty(climate.data)==T) { climate.data <- climate.data.temp}
+  else {
+  climate.data <- 
+    left_join(climate.data, climate.data.temp, by = c("season", 'station'))
+  }
+}
+
+# climate.data %>% 
+#   short_summary()
+climate.data <- 
+  climate.data %>% 
+  rename( berryNb.TmaxIni = TmaxIni, 
+         berryNb.TmeanFlow = TmeanFlow,
+         berryNb.RainTotFlow = RainTotFlow)
+
+
+write_csv(climate.data, file.path(IntermediateResults, 
+                                  paste(output.name, current.subject,
+                                        "_meteo_values.csv", sep = '')))
+climate.data %>%
+  short_summary()
+
+climate.data.all <- 
+  left_join(climate.data.all, climate.data)
+
+```
+#berry mass critical period 
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+# calcMeanMetVal('1997-1998', 44, 10, 10 )
+current.subject = 'BerryWeight'
+
+climate.data <- NULL
+for(elt in c( "TmeanFlow", "RainTotFlow", 'RadFlow',  'RainTotVer')){
+  
+  climate.data.temp <- 
+    int.data %>% 
+    group_by(season, station) %>% 
+    do(calcMetFactors(., elt))
+  if(is_empty(climate.data)==T) { climate.data <- climate.data.temp}
+  else {
+  climate.data <- 
+    left_join(climate.data, climate.data.temp, by = c("season", 'station'))
+  }
+}
+
+climate.data <- 
+  climate.data %>% 
+  rename(berryWt.TmeanFlow = TmeanFlow, 
+         berryWt.RainTotFlow = RainTotFlow, 
+         berryWt.RadFlow = RadFlow, 
+         berryWt.RainTotVer = RainTotVer)
+
+write_csv(climate.data, file.path(IntermediateResults, 
+                                  paste(output.name, current.subject,
+                                        "_meteo_values.csv", sep = '')))
+climate.data %>% 
+  filter(season == "2020-2021")
+
+
+climate.data %>% 
+  short_summary()
+
+climate.data.all <- 
+  left_join(climate.data.all, climate.data)
+
+```
+#bunch mass critical period 
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+# calcMeanMetVal('1997-1998', 44, 10, 10 )
+current.subject = 'BunchWeight'
+
+climate.data <- NULL
+for(elt in c( "TmeanFlow", "RainTotFlow", 'Et0RainTotVer')){
+  
+  climate.data.temp <- 
+    int.data %>% 
+    group_by(season, station) %>% 
+    do(calcMetFactors(., elt))
+  if(is_empty(climate.data)==T) { climate.data <- climate.data.temp}
+  else {
+  climate.data <- 
+    left_join(climate.data, climate.data.temp, by = c("season", 'station'))
+  }
+}
+
+climate.data <- 
+  climate.data %>% 
+  rename(bunchWt.TmeanFlow = TmeanFlow, 
+         bunchWt.RainTotFlow = RainTotFlow, 
+         bunchWt.Et0RainTotVer = Et0RainTotVer)
+
+write_csv(climate.data, file.path(IntermediateResults, 
+                                  paste(output.name, current.subject,
+                                        "_meteo_values.csv", sep = '')))
+
+climate.data %>% 
+  short_summary()
+
+climate.data.all <- 
+  left_join(climate.data.all, climate.data)
+```
+#yield critical period 
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+# calcMeanMetVal('1997-1998', 44, 10, 10 )
+current.subject = 'yield'
+
+climate.data <- NULL
+for(elt in c( "TmaxIni", "RadIni", 'TmaxFlow', 'Et0RainTotVer')){
+  
+  climate.data.temp <- 
+    int.data %>% 
+    group_by(season, station) %>% 
+    do(calcMetFactors(., elt))
+  if(is_empty(climate.data)==T) { climate.data <- climate.data.temp}
+  else {
+  climate.data <- 
+    left_join(climate.data, climate.data.temp, by = c("season", 'station'))
+  }
+}
+
+climate.data <- 
+  climate.data %>% 
+  rename(yield.TmaxIni = TmaxIni, 
+         yield.RadIni = RadIni, 
+         yield.TmaxFlow = TmaxFlow,
+         yield.Et0RainTotVer = Et0RainTotVer)
+
+write_csv(climate.data, file.path(IntermediateResults, 
+                                  paste(output.name, current.subject,
+                                        "_meteo_values.csv", sep = '')))
+
+climate.data %>% 
+  short_summary()
+
+climate.data.all <- 
+  left_join(climate.data.all, climate.data)
+
+write_csv(climate.data.all, file.path(IntermediateResults, 'climate.data.all.csv'))
+```
+
+#yield prediction for 4 cane
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+
+# yield.pred <- 
+#   climate.data.all %>% 
+#   mutate(
+#          bunchNB.predict = -43.43 + 4.60 * bunchNb.TmaxIni+0.42*bunchNb.RadIni,
+#          berryNb.predict = -44.3+3.18*berryNb.TmeanFlow-0.83*min(50,berryNb.RainTotFlow)+
+#                            2.58*berryNb.TmaxIni+ 0.047*berryNb.TmeanFlow*min(50,berryNb.RainTotFlow),
+#          berryWt.predict = 1.4-1.65e-2*berryWt.TmeanFlow-1.67e-2 *min(50,berryWt.RainTotFlow) + 
+#                            3.8e-2 * berryWt.RadFlow + 2.33e-2 *berryWt.RainTotVer+
+#                            9.87e-4 * berryWt.TmeanFlow*min(50,berryWt.RainTotFlow)-
+#                            8.98e-4 * berryWt.RadFlow * berryWt.RainTotVer,
+#          bunchWt.predict = 47.23+6.42*bunchWt.TmeanFlow-2.88 * min(50,bunchWt.RainTotFlow)-
+#                            0.09* bunchWt.Et0RainTotVer + 0.17 *bunchWt.TmeanFlow * min(50,bunchWt.RainTotFlow),
+#          yield.predict.1 = -28.24 + 0.37*yield.TmaxIni + 0.30* yield.RadIni +
+#                             0.92*yield.TmaxFlow + 4.6e-3*yield.Et0RainTotVer
+#          ) %>% 
+#   mutate(yield.predict.2 = bunchNB.predict * bunchWt.predict,
+#          yield.predict.3 = bunchNB.predict * berryNb.predict * berryWt.predict) %>% 
+#   unique(.) %>% 
+#   mutate(yield.predict.2 = yield.predict.2/1000, yield.predict.3 = yield.predict.3/1000) #kg per vine
+
+# short_summary(yield.pred)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

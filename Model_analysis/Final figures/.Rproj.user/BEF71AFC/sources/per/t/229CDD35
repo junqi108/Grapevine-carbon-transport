@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1601420562843.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2345741685",
+    "id" : "229CDD35",
+    "lastKnownWriteTime" : 1601428949,
+    "last_content_update" : 1601428950795,
+    "path" : "W:/GrapevineXL_CT/Model_analysis/Final figures/Carbon_transport_scenario.Rmd",
+    "project_path" : "Carbon_transport_scenario.Rmd",
+    "properties" : {
+        "chunk_output_type" : "inline",
+        "cursorPosition" : "460,0",
+        "scrollLine" : "455"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

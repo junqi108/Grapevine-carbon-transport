@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1616547173298.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "226|10|275|0|\n700|73|802|0|\n",
+    "hash" : "0",
+    "id" : "253793D3",
+    "lastKnownWriteTime" : 1619732243,
+    "last_content_update" : 1619732243677,
+    "path" : "/powerplant/workspace/hrmjxz/GrapevineXL_CT/Model_analysis/Final figures/Carbon_optim_figure_com_latest.Rmd",
+    "project_path" : "Carbon_optim_figure_com_latest.Rmd",
+    "properties" : {
+        "chunk_output_type" : "console",
+        "cursorPosition" : "211,43",
+        "scrollLine" : "135"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

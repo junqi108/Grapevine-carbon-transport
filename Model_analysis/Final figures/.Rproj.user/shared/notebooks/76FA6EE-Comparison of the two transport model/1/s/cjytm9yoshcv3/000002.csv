@@ -1,0 +1,44 @@
+"0","```r
+p1 <- 
+qplot(node, sd_primary.r, 
+      data = CTRAM) +
+  geom_point(aes(colour = as.factor(source)))+
+  lib.opts.nolegend
+  
+
+p2 <- 
+qplot(node, sd_primary.j, 
+      data = CTRAM) +
+  geom_point(aes(colour = as.factor(source)))+
+  lib.opts.nolegend
+
+# 
+p3 <- 
+qplot(node, sd_primary.cpt, 
+      data = CTRAM) +
+  geom_point(aes(colour = as.factor(source)))+
+  lib.opts.nolegend
+
+p4 <- 
+qplot(node, c, 
+      data = CTRAM) +
+  geom_point(aes(colour = as.factor(source)))+
+  lib.opts.nolegend
+
+p5 <- 
+qplot(node, h.pot, 
+      data = CTRAM) +
+  geom_point(aes(colour = as.factor(source)))+
+  lib.opts.nolegend
+
+p6 <- 
+qplot(node, h.rs, 
+      data = CTRAM) +
+  geom_point(aes(colour = as.factor(source)))+
+  lib.opts.legend
+
+
+plot_grid(p1, p2, p3, p4,p5, p6, nrow = 3)
+
+ggsave(file.path(FigureOutput, 'model comparison between orignal and with branch.pdf'), width = 10, height = 12)
+```"
